@@ -1,6 +1,6 @@
 # Omni Aura Agent Skills
 
-Reusable skills for AI coding agents, built from real production experience at [Ditto](https://heyditto.ai).
+Reusable skills for AI coding agents, built from real production experience at [Ditto](https://heyditto.ai?utm_source=github&utm_medium=skills-repo&utm_campaign=solidjs-patterns).
 
 ## Available Skills
 
@@ -23,7 +23,7 @@ npx skills add https://github.com/omniaura/skills --skill solidjs-patterns
 
 ## About
 
-These skills were developed while building [Ditto](https://heyditto.ai), a personal AI assistant. They represent lessons learned from a complete React-to-SolidJS migration and ongoing production development.
+These skills were developed while building [Ditto](https://heyditto.ai?utm_source=github&utm_medium=skills-repo&utm_campaign=solidjs-patterns), a personal AI assistant. They represent lessons learned from a complete React-to-SolidJS migration and ongoing production development.
 
 ## License
 
