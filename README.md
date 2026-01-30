@@ -21,6 +21,8 @@ Battle-tested patterns for SolidJS development, including:
 npx skills add https://github.com/omniaura/skills --skill solidjs-patterns
 ```
 
+Learn more about the skills registry at [skills.sh/docs](https://skills.sh/docs).
+
 ## About
 
 These skills were developed while building [Ditto](https://heyditto.ai?utm_source=github&utm_medium=skills-repo&utm_campaign=solidjs-patterns), a personal AI assistant. They represent lessons learned from a complete React-to-SolidJS migration and ongoing production development.
