@@ -1,0 +1,16 @@
+{
+  "version": "2.0.0",
+  "organization": "OmniAura",
+  "date": "March 2026",
+  "abstract": "Comprehensive best practices guide for SolidJS and SolidStart applications, designed for AI agents and LLMs. Contains 50+ rules across 9 categories, prioritized by impact from critical (reactivity correctness, data fetching) to incremental (interop, testing). Each rule includes explanations, real-world incorrect vs. correct examples, and impact metrics to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.",
+  "references": [
+    "https://docs.solidjs.com",
+    "https://docs.solidjs.com/solid-start",
+    "https://github.com/solidjs/solid",
+    "https://github.com/solidjs/solid-start",
+    "https://tanstack.com/query/latest/docs/solid/overview",
+    "https://kobalte.dev",
+    "https://github.com/hngngn/shadcn-solid",
+    "https://github.com/solidjs-community/made-in-solid"
+  ]
+}

@@ -1,64 +1,129 @@
 ---
 name: solidjs-patterns
-description: SolidJS reactivity patterns, state management, and common pitfalls. Covers createSignal vs createStore, fine-grained reactivity, collapsible UI components, and anti-patterns to avoid.
+description: SolidJS and SolidStart performance and correctness guidelines for AI agents. This skill should be used when writing, reviewing, or refactoring SolidJS/SolidStart code to ensure correct reactivity patterns and optimal performance. Triggers on tasks involving SolidJS components, signals, stores, Solid Query, SolidStart server functions, routing, or fine-grained reactivity.
+license: MIT
+metadata:
+  author: omniaura
+  version: "2.0.0"
 ---
 
 # SolidJS Patterns and Best Practices
 
-This skill provides guidance on SolidJS-specific patterns used in the Ditto frontend. SolidJS has a unique reactivity model that differs from React, and understanding these patterns is essential for building performant, bug-free UIs.
+Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 50+ rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
 
-## Quick Navigation
+## When to Apply
 
-- **[Reactivity Fundamentals](reactivity.md)** - Understanding signals, stores, and reactive contexts
-- **[Explicit Dependency Tracking](explicit-tracking.md)** - Using `on()` to control what triggers effects (like React's useEffect deps)
-- **[State Management Patterns](state-patterns.md)** - Choosing the right state primitive for your use case
-- **[Common Anti-Patterns](anti-patterns.md)** - Patterns that look correct but break reactivity
-- **[Advanced Primitives](advanced-primitives.md)** - Secondary primitives: createSelector, createDeferred, useTransition, etc.
-- **[External Interop](external-interop.md)** - Using `from` and `observable` for browser APIs and RxJS
-- **[Performance Patterns](performance.md)** - Code splitting, lazy loading, and bundle optimization
-- **[Testing SolidJS](testing.md)** - Unit testing reactive code with vitest
+Reference these guidelines when:
+- Writing new SolidJS components or SolidStart pages
+- Migrating React code to SolidJS
+- Implementing data fetching (Solid Query, createAsync, createResource)
+- Working with SolidStart server functions ("use server")
+- Reviewing code for reactivity correctness issues
+- Optimizing bundle size or rendering performance
+- Setting up state management (signals, stores, context)
+- Writing tests for reactive code
 
-## Key Principle: Fine-Grained Reactivity
+## Rule Categories by Priority
 
-SolidJS uses **fine-grained reactivity** - only the exact DOM nodes that depend on changed data will update. This is fundamentally different from React's virtual DOM diffing.
+| Priority | Category | Impact | Prefix |
+|----------|----------|--------|--------|
+| 1 | Reactivity Correctness | CRITICAL | `reactivity-` |
+| 2 | Data Fetching & Server | CRITICAL | `data-` |
+| 3 | Component Patterns | HIGH | `component-` |
+| 4 | State Management | HIGH | `state-` |
+| 5 | Rendering & Control Flow | MEDIUM-HIGH | `rendering-` |
+| 6 | SolidStart Patterns | MEDIUM-HIGH | `start-` |
+| 7 | Performance Optimization | MEDIUM | `perf-` |
+| 8 | Testing | LOW-MEDIUM | `testing-` |
+| 9 | External Interop | LOW | `interop-` |
 
-### Why This Matters
+## Quick Reference
 
-```typescript
-// In React: Changing `items[2]` re-renders the entire list component
-// In SolidJS: Only the DOM node for items[2] updates
+### 1. Reactivity Correctness (CRITICAL)
 
-// BUT: You must use the right primitives to get this behavior
+- `reactivity-no-destructure-props` - Never destructure props — breaks reactivity
+- `reactivity-no-helper-access` - Access signals/stores directly in JSX, not via helpers
+- `reactivity-no-set-map-signal` - Use store instead of Set/Map with signal for collections
+- `reactivity-no-rest-spread` - Use splitProps instead of rest spread
+- `reactivity-signals-not-refs` - Use signals for timing-sensitive state, not plain refs
+- `reactivity-no-direct-mutation` - Never mutate store values directly
+- `reactivity-no-effect-order` - Don't assume effect execution order
+- `reactivity-cleanup-effects` - Always clean up effects with onCleanup
+- `reactivity-on-explicit-tracking` - Use on() to break circular dependencies
+
+### 2. Data Fetching & Server (CRITICAL)
+
+- `data-no-destructure-query` - Never destructure Solid Query results
+- `data-parallel-queries` - Don't create query waterfalls
+- `data-guard-suspense` - Guard .data access to prevent unwanted Suspense
+- `data-include-all-query-keys` - Include all dependencies in query keys
+- `data-query-options-function` - Wrap query options in arrow function
+
+### 3. Component Patterns (HIGH)
+
+- `component-no-early-return` - Don't return early before reactive primitives
+
+### 4. State Management (HIGH)
+
+- `state-signal-vs-store` - Choose signal vs store based on update granularity
+- `state-context-pattern` - Use typed context with store for global state
+- `state-reconcile-async` - Use reconcile for fine-grained async updates
+
+### 5. Rendering & Control Flow (MEDIUM-HIGH)
+
+- `rendering-use-for-not-map` - Use `<For>` instead of .map() for lists
+- `rendering-use-show-not-ternary` - Use `<Show>` instead of JSX conditionals
+- `rendering-suspense-inside-show` - Place Suspense inside conditionals (LazyShow pattern)
+
+### 6. SolidStart Patterns (MEDIUM-HIGH)
+
+- `start-use-server-validation` - Always validate "use server" function inputs
+- `start-createasync-not-resource` - Use createAsync + query() for data loading
+- `start-route-preloading` - Always define route preload functions
+
+### 7. Performance Optimization (MEDIUM)
+
+- `perf-lazy-load-heavy-components` - Lazy load heavy components
+- `perf-create-selector` - Use createSelector for single-selection in large lists
+
+### 8. Testing (LOW-MEDIUM)
+
+- `testing-createroot` - Wrap reactive test code in createRoot
+
+### 9. External Interop (LOW)
+
+- `interop-from-browser-apis` - Use from() to bridge browser APIs into reactive signals
+
+## How to Use
+
+Read individual rule files for detailed explanations and code examples:
+
+```
+rules/reactivity-no-destructure-props.md
+rules/data-parallel-queries.md
+rules/start-use-server-validation.md
 ```
 
-## Quick Reference: When to Use What
+Each rule file contains:
+- Brief explanation of why it matters
+- Incorrect code example with explanation
+- Correct code example with explanation
+- Impact rating and tags
+- Additional context and references
 
-| Use Case | Primitive | Example |
-|----------|-----------|---------|
-| Single value | `createSignal<T>` | `createSignal<boolean>(false)` |
-| Object with few properties | `createSignal<T>` | `createSignal({ x: 0, y: 0 })` |
-| List where items change individually | `createStore<T[]>` | `createStore<boolean[]>([])` |
-| Complex nested state | `createStore<T>` | `createStore({ users: [], settings: {} })` |
-| Derived/computed value | `createMemo` | `createMemo(() => items().length)` |
-| Large list with single selection | `createSelector` | `createSelector(selectedId)` |
-| Timing-sensitive blocking flags | `createSignal` | Never use plain refs for this! |
-| Deferred expensive computation | `createDeferred` | `createDeferred(searchTerm)` |
-| External subscriptions (browser APIs) | `from` | `from((set) => { ... return cleanup })` |
+## Full Compiled Document
 
-## Common Gotchas
+For the complete guide with all rules expanded: `AGENTS.md`
 
-1. **Don't destructure props** - Breaks reactivity
-2. **Don't access signals outside JSX** through helper functions - Breaks tracking
-3. **Don't use Set/Map with createSignal** for per-item reactivity - Use createStore instead
-4. **Do access store properties directly in JSX** - Creates proper subscriptions
-5. **Don't use plain refs for timing-sensitive state** - Refs are captured in closures, signals are read at execution time
-6. **Don't assume effect order** - Effects run in dependency order, not definition order
+## Legacy Files
 
-## Related Reports
-
-- [2025-01-14 - SendMessage Streaming State Bug Audit](../../../docs/audits/2025-01-14-sendmessage-streaming-state-bug/00-summary.md) - Case study: `on()` fixing circular dependency between query and signal
-- [2026-01-11 - SolidJS Collapsible Cards Reactivity Fix](../../../docs/reports/2026-01-11-solidjs-collapsible-cards-reactivity.md) - Detailed case study of debugging reactivity issues
-- [2026-01-11 - Skeleton/Suspense/Code Splitting Architecture](../../../docs/reports/2026-01-11-skeleton-suspense-code-splitting-architecture.md) - LazyShow pattern, skeleton components
-- [2026-01-10 - SolidJS Code Splitting Implementation](../../../docs/reports/2026-01-10-solidjs-code-splitting-implementation.md) - Route-level and component splitting strategies
-- [2026-01-09 - SolidJS vs React Performance Comparison](../../../docs/reports/2026-01-09-solidjs-react-performance-comparison.md) - Performance metrics and optimization
-- [2026-01-07 - SolidJS Migration Testing](../../../docs/reports/2026-01-07-solidjs-migration-testing.md) - Testing patterns during React→SolidJS migration
+The following files contain additional detailed patterns and are being migrated into individual rules:
+- `reactivity.md` - Reactivity fundamentals
+- `explicit-tracking.md` - on() and untrack() patterns
+- `state-patterns.md` - State management patterns
+- `anti-patterns.md` - Common anti-patterns
+- `advanced-primitives.md` - Secondary primitives
+- `external-interop.md` - from() and observable() patterns
+- `solid-query.md` - Solid Query patterns
+- `performance.md` - Performance optimization
+- `testing.md` - Testing patterns
