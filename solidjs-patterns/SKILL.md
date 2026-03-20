@@ -4,12 +4,12 @@ description: SolidJS and SolidStart performance and correctness guidelines for A
 license: MIT
 metadata:
   author: omniaura
-  version: "2.0.0"
+  version: "2.1.0"
 ---
 
 # SolidJS Patterns and Best Practices
 
-Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 50+ rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
+Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 49 rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
 
 ## When to Apply
 
@@ -50,6 +50,9 @@ Reference these guidelines when:
 - `reactivity-no-effect-order` - Don't assume effect execution order
 - `reactivity-cleanup-effects` - Always clean up effects with onCleanup
 - `reactivity-on-explicit-tracking` - Use on() to break circular dependencies
+- `reactivity-create-deferred` - Use createDeferred for expensive computations on rapid input
+- `reactivity-create-reaction` - Use createReaction to separate tracking from side effects
+- `reactivity-no-signal-capture` - Don't capture signals in closures outside reactive context
 
 ### 2. Data Fetching & Server (CRITICAL)
 
@@ -58,22 +61,30 @@ Reference these guidelines when:
 - `data-guard-suspense` - Guard .data access to prevent unwanted Suspense
 - `data-include-all-query-keys` - Include all dependencies in query keys
 - `data-query-options-function` - Wrap query options in arrow function
+- `data-mutation-invalidation` - Invalidate queries after mutations
 
 ### 3. Component Patterns (HIGH)
 
 - `component-no-early-return` - Don't return early before reactive primitives
+- `component-merge-props` - Use mergeProps for reactive default values
+- `component-split-props` - Use splitProps to separate and forward props
 
 ### 4. State Management (HIGH)
 
 - `state-signal-vs-store` - Choose signal vs store based on update granularity
 - `state-context-pattern` - Use typed context with store for global state
 - `state-reconcile-async` - Use reconcile for fine-grained async updates
+- `state-produce-complex-mutations` - Use produce() for complex store mutations
+- `state-form-store` - Use createStore for multi-field form state
 
 ### 5. Rendering & Control Flow (MEDIUM-HIGH)
 
 - `rendering-use-for-not-map` - Use `<For>` instead of .map() for lists
 - `rendering-use-show-not-ternary` - Use `<Show>` instead of JSX conditionals
 - `rendering-suspense-inside-show` - Place Suspense inside conditionals (LazyShow pattern)
+- `rendering-use-switch-match` - Use Switch/Match for multi-branch conditionals
+- `rendering-error-boundary` - Wrap risky components in ErrorBoundary
+- `rendering-index-vs-for` - Choose between For and Index based on what changes
 
 ### 6. SolidStart Patterns (MEDIUM-HIGH)
 
@@ -85,14 +96,24 @@ Reference these guidelines when:
 
 - `perf-lazy-load-heavy-components` - Lazy load heavy components
 - `perf-create-selector` - Use createSelector for single-selection in large lists
+- `perf-memo-expensive` - Use createMemo for expensive derived computations
+- `perf-route-code-splitting` - Use lazy() for route-level code splitting
+- `perf-skeleton-suspense` - Use skeleton components for Suspense fallbacks
+- `perf-use-transition` - Use useTransition for non-blocking async updates
+- `perf-render-effect` - Use createRenderEffect for synchronous DOM measurements
 
 ### 8. Testing (LOW-MEDIUM)
 
 - `testing-createroot` - Wrap reactive test code in createRoot
+- `testing-render-components` - Use render() and Testing Library for component tests
+- `testing-render-hook` - Use renderHook for testing custom hooks
+- `testing-async-waitfor` - Use waitFor for async component testing
+- `testing-mock-hoisted` - Use vi.hoisted with vi.mock for proper mock hoisting
 
 ### 9. External Interop (LOW)
 
 - `interop-from-browser-apis` - Use from() to bridge browser APIs into reactive signals
+- `interop-observable-export` - Use observable() to expose signals to external libraries
 
 ## How to Use
 
