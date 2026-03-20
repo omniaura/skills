@@ -9,7 +9,7 @@ tags: component, children, memoization, render props
 
 **Impact: MEDIUM (repeated expensive child evaluation, inability to inspect/manipulate children)**
 
-When you need to inspect, iterate, or manipulate `props.children`, use the `children()` helper from `solid-js`. It resolves any reactive children (functions, fragments) into actual DOM elements and memoizes the result.
+When you need to inspect, iterate, or manipulate `props.children`, use the `children()` helper from `solid-js`. It resolves reactive children (functions, fragments) into resolved child values and memoizes the result. Resolved children can be DOM nodes, text nodes, primitives, JSX elements, or null.
 
 **Incorrect (accessing props.children directly for manipulation):**
 
@@ -18,7 +18,7 @@ const Wrapper = (props) => {
   // BAD: props.children might be a function, fragment, or reactive expression
   // Accessing it multiple times re-evaluates each time
   createEffect(() => {
-    console.log(props.children) // Could be a getter, not resolved nodes
+    console.log(props.children) // Could be a getter, not resolved values
   })
 
   return <div>{props.children}</div>
@@ -33,7 +33,7 @@ import { children, createEffect } from "solid-js"
 const ColoredList = (props) => {
   const resolved = children(() => props.children)
 
-  // resolved() returns actual DOM nodes — safe to inspect/modify
+  // resolved() returns resolved child values — safe to inspect/modify
   createEffect(() => {
     const nodes = resolved.toArray()
     nodes.forEach((node, i) => {

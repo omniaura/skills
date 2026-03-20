@@ -1,31 +1,17 @@
 ---
-title: Use resource.latest for Stale-While-Revalidate UI
+title: Use resource.latest for Consistent Stale-While-Revalidate UI
 impact: MEDIUM
-impactDescription: "UI flashes loading spinner on refetch instead of showing stale data"
+impactDescription: "inconsistent data display during error states and initial loads"
 tags: data, resource, stale-while-revalidate, UX
 ---
 
-## Use resource.latest for Stale-While-Revalidate UI
+## Use resource.latest for Consistent Stale-While-Revalidate UI
 
-**Impact: MEDIUM (UI flashes loading spinner on refetch instead of showing stale data)**
+**Impact: MEDIUM (inconsistent data display during error states and initial loads)**
 
-When a `createResource` refetches (source signal changes, `refetch()` called), `resource()` returns `undefined` during the pending state, triggering Suspense fallbacks. Use `resource.latest` to keep showing the previous data while the new data loads.
+`resource()` and `resource.latest` both retain the previous value during refetch (state: `"refreshing"`). The key difference is error handling: `resource()` throws on error (triggering ErrorBoundary), while `resource.latest` returns the last successful value. Use `resource.latest` when you want to keep showing data even after an error, and pair with `resource.loading` / `resource.state` for loading indicators.
 
-**Incorrect (UI flashes to loading on every refetch):**
-
-```typescript
-const [page, setPage] = createSignal(1)
-const [data] = createResource(page, fetchPage)
-
-// BAD: data() returns undefined during refetch → triggers Suspense fallback
-return (
-  <Suspense fallback={<Spinner />}>
-    <div>{data()?.title}</div>  {/* Flashes to spinner on page change */}
-  </Suspense>
-)
-```
-
-**Correct (stale data stays visible while new data loads):**
+**Basic pattern — loading indicator without Suspense fallback flash:**
 
 ```typescript
 const [page, setPage] = createSignal(1)
@@ -37,7 +23,7 @@ return (
       <div class="overlay-spinner" />  {/* Subtle loading indicator */}
     </Show>
     <div style={{ opacity: data.loading ? 0.6 : 1 }}>
-      {data.latest?.title}  {/* Shows previous page while new page loads */}
+      {data.latest?.title}  {/* Shows previous page during load AND errors */}
     </div>
   </div>
 )
@@ -45,12 +31,32 @@ return (
 
 **resource() vs resource.latest:**
 
-| Accessor | During Initial Load | During Refetch | On Error |
-|----------|-------------------|----------------|----------|
-| `resource()` | `undefined` | `undefined` | throws |
-| `resource.latest` | `undefined` | Previous value | Previous value |
+| Accessor | Initial Load | Refetch (`"refreshing"`) | On Error |
+|----------|-------------|--------------------------|----------|
+| `resource()` | `undefined` | Previous value | Throws (triggers ErrorBoundary) |
+| `resource.latest` | `undefined` | Previous value | Last successful value |
 
-**Combine with useTransition for route-level stale-while-revalidate:**
+**When resource.latest matters most — error resilience:**
+
+```typescript
+// resource() throws on error → ErrorBoundary catches it, UI replaced
+// resource.latest returns last good value → data stays visible
+
+<ErrorBoundary fallback={<ErrorPanel />}>
+  <div>{data()?.title}</div>  {/* Replaced by ErrorPanel on error */}
+</ErrorBoundary>
+
+// vs
+
+<div>
+  <Show when={data.error}>
+    <div class="error-banner">{data.error.message}</div>
+  </Show>
+  <div>{data.latest?.title}</div>  {/* Still shows last successful data */}
+</div>
+```
+
+**Combine with useTransition for route-level transitions:**
 
 ```typescript
 const [isPending, start] = useTransition()
@@ -65,7 +71,7 @@ const navigate = (page: number) => start(() => setPage(page))
 **With initialValue for type safety:**
 
 ```typescript
-// Without initialValue: data() can be undefined
+// Without initialValue: data() can be undefined during initial load
 const [data] = createResource(source, fetcher)
 
 // With initialValue: data() always returns T (never undefined)
@@ -74,9 +80,10 @@ const [data] = createResource(source, fetcher, { initialValue: [] })
 ```
 
 **Notes:**
-- `resource.latest` is the built-in stale-while-revalidate primitive — no external library needed
-- Pair with `data.loading` for subtle loading indicators (opacity, overlay spinners) instead of full Suspense fallbacks
+- During refetch, both `resource()` and `resource.latest` return the previous value — the difference is only on error
+- `resource.latest` is most valuable for error-resilient UIs where you want data to remain visible
 - Use `resource.state` for fine-grained status: `"unresolved"`, `"pending"`, `"ready"`, `"refreshing"`, `"errored"`
+- Pair with `data.loading` for subtle loading indicators (opacity, overlay spinners)
 - This pattern is especially valuable for pagination, search-as-you-type, and dashboard auto-refresh
 
 Reference: [SolidJS createResource](https://docs.solidjs.com/reference/basic-reactivity/create-resource)
