@@ -1,11 +1,81 @@
 # SolidJS Patterns — Complete Rule Reference
 
-Auto-generated compiled document of all 49 rules. For individual rules, see `rules/`.
+Auto-generated compiled document of all 57 rules. For individual rules, see `rules/`.
 
 ---
 
 # 1. Reactivity Correctness (CRITICAL)
+## Batch Multiple Signal Updates to Prevent Intermediate Renders
 
+**Impact: MEDIUM (unnecessary intermediate re-renders when updating multiple signals)**
+
+When updating multiple signals in event handlers or callbacks, wrap them in `batch()` to coalesce notifications. Solid automatically batches updates inside effects and store setters, but event handlers and async callbacks run outside the reactive system.
+
+**Incorrect (each setter triggers a separate update cycle):**
+
+```typescript
+const handleSubmit = () => {
+  setName("John")       // triggers re-render 1
+  setEmail("j@test.com") // triggers re-render 2
+  setSubmitted(true)     // triggers re-render 3
+}
+```
+
+**Correct (single update cycle for all changes):**
+
+```typescript
+import { batch } from "solid-js"
+
+const handleSubmit = () => {
+  batch(() => {
+    setName("John")
+    setEmail("j@test.com")
+    setSubmitted(true)
+    // All three updates applied, then ONE re-render
+  })
+}
+```
+
+**Where batching is automatic (no need for manual `batch()`):**
+
+```typescript
+// Inside createEffect — already batched
+createEffect(() => {
+  setA(b())
+  setC(d())  // batched with setA
+})
+
+// Inside store setters — already batched
+setState(produce(s => {
+  s.name = "John"
+  s.email = "j@test.com"  // batched
+}))
+```
+
+**Where you DO need manual `batch()`:**
+
+```typescript
+// Event handlers
+<button onClick={() => batch(() => { setX(1); setY(2) })}>
+
+// setTimeout / setInterval
+setTimeout(() => batch(() => { setA(1); setB(2) }), 1000)
+
+// Promise callbacks
+fetch(url).then(data => batch(() => {
+  setData(data)
+  setLoading(false)
+}))
+```
+
+**Notes:**
+- `batch` returns the return value of the callback, so you can use it inline: `const result = batch(() => { ... })`
+- For 2+ signal updates in the same event handler, `batch` is a no-brainer micro-optimization
+- Store `setState` already batches internally — no need to wrap store updates
+
+Reference: [SolidJS batch](https://docs.solidjs.com/reference/reactive-utilities/batch)
+
+---
 ## Always Clean Up Effects with onCleanup
 
 **Impact: HIGH (memory leaks from unremoved listeners, timers, subscriptions)**
@@ -34,7 +104,6 @@ Always clean up: event listeners, setInterval/setTimeout, WebSocket connections,
 Reference: [SolidJS onCleanup](https://docs.solidjs.com/reference/lifecycle/on-cleanup)
 
 ---
-
 ## Use createDeferred for Expensive Computations on Rapid Input
 
 **Impact: MEDIUM (prevents UI jank during rapid updates)**
@@ -76,7 +145,6 @@ const results = createMemo(() =>
 - Prefer over manual `setTimeout`/debounce patterns for reactive values
 
 ---
-
 ## Use createReaction to Separate Tracking from Side Effects
 
 **Impact: LOW (fine-grained control over effect triggers)**
@@ -111,7 +179,63 @@ track(() => user().id)
 - Useful for preventing unnecessary effect re-runs on complex objects
 
 ---
+## Derive State with Functions or Memos, Not Effects
 
+**Impact: HIGH (unnecessary re-renders, potential infinite loops, and harder-to-trace data flow)**
+
+When one value depends on another, derive it as a plain function or `createMemo` — never synchronize signals with `createEffect`. Effects are for side effects (DOM manipulation, logging, network requests), not for keeping state in sync.
+
+**Incorrect (syncing state with an effect):**
+
+```typescript
+const [firstName, setFirstName] = createSignal("John")
+const [lastName, setLastName] = createSignal("Doe")
+const [fullName, setFullName] = createSignal("")
+
+// BAD: effect creates a hidden data flow, extra signal, extra re-render
+createEffect(() => {
+  setFullName(`${firstName()} ${lastName()}`)
+})
+```
+
+**Correct (cheap derivation — plain function):**
+
+```typescript
+const [firstName, setFirstName] = createSignal("John")
+const [lastName, setLastName] = createSignal("Doe")
+
+// GOOD: plain function — zero overhead, recalculates when called in tracked scope
+const fullName = () => `${firstName()} ${lastName()}`
+```
+
+**Correct (expensive derivation — createMemo):**
+
+```typescript
+const [items, setItems] = createSignal<Item[]>([])
+const [filter, setFilter] = createSignal("")
+
+// GOOD: createMemo caches result, only recomputes when dependencies change
+const filteredItems = createMemo(() =>
+  items().filter(item => item.name.includes(filter()))
+)
+```
+
+**When to use which:**
+
+| Scenario | Use |
+|----------|-----|
+| Simple property access, string concat, math | Plain function `() => ...` |
+| Filtering, sorting, mapping large arrays | `createMemo` |
+| Side effects (fetch, DOM, logging) | `createEffect` |
+
+**Notes:**
+- Plain functions in SolidJS are naturally reactive when called inside JSX or effects — they re-evaluate when their signal dependencies change
+- `createMemo` adds caching — use it when the computation is expensive or accessed in multiple places
+- If you find yourself writing `createEffect(() => setX(...))`, it's almost always a sign you should use a derived function or memo instead
+
+Reference: [SolidJS Derived Signals](https://docs.solidjs.com/concepts/derived-values/derived-signals)
+
+---
 ## Never Destructure Props
 
 **Impact: CRITICAL (silent reactivity loss — UI stops updating)**
@@ -150,7 +274,6 @@ function Badge(props: BadgeProps) {
 Reference: [SolidJS Props Documentation](https://docs.solidjs.com/concepts/components/props)
 
 ---
-
 ## Never Mutate Store Values Directly
 
 **Impact: CRITICAL (mutations silently ignored — UI doesn't update)**
@@ -183,7 +306,6 @@ setState(produce(state => {
 Reference: [SolidJS Stores](https://docs.solidjs.com/concepts/stores)
 
 ---
-
 ## Don't Assume Effect Execution Order
 
 **Impact: HIGH (intermittent bugs from effects running in unexpected order)**
@@ -229,7 +351,6 @@ createEffect(() => {
 Reference: [SolidJS Effects](https://docs.solidjs.com/concepts/effects)
 
 ---
-
 ## Access Signals/Stores Directly in JSX
 
 **Impact: CRITICAL (silent tracking loss — UI stops reacting to changes)**
@@ -271,7 +392,6 @@ const getCount = () => count()
 Reference: [SolidJS Reactivity](https://docs.solidjs.com/concepts/intro-to-reactivity)
 
 ---
-
 ## Use splitProps Instead of Rest Spread
 
 **Impact: CRITICAL (extracted props lose reactivity silently)**
@@ -310,7 +430,6 @@ function Button(props: ButtonProps) {
 Reference: [SolidJS splitProps](https://docs.solidjs.com/reference/component-apis/split-props)
 
 ---
-
 ## Use Store Instead of Set/Map with Signal
 
 **Impact: CRITICAL (O(n) updates instead of O(1) — all subscribers re-run)**
@@ -358,7 +477,6 @@ const toggle = (index: number) => {
 Reference: [SolidJS Stores](https://docs.solidjs.com/concepts/stores)
 
 ---
-
 ## Do Not Capture Signals in Closures Outside Reactive Context
 
 **Impact: HIGH (stale values in event handlers and callbacks)**
@@ -409,7 +527,6 @@ createEffect(() => {
 Reference: [SolidJS reactivity docs](https://docs.solidjs.com/concepts/reactivity)
 
 ---
-
 ## Use on() to Break Circular Dependencies
 
 **Impact: HIGH (infinite effect loops from reading and writing the same signal)**
@@ -457,7 +574,6 @@ createEffect(() => {
 Reference: [SolidJS on()](https://docs.solidjs.com/reference/reactive-utilities/on)
 
 ---
-
 ## Use Signals for Timing-Sensitive State, Not Refs
 
 **Impact: CRITICAL (closures capture stale ref values — race conditions and bugs)**
@@ -509,9 +625,90 @@ createEffect(() => {
 Reference: [SolidJS Signals](https://docs.solidjs.com/concepts/signals)
 
 ---
+## Use untrack When Invoking Render Callbacks
+
+**Impact: MEDIUM (parent computations subscribe to signals inside child render functions)**
+
+When a parent effect or memo calls a render callback (children-as-function, render props), wrap the call in `untrack()`. Without this, the parent computation subscribes to every signal the child accesses, causing the parent to re-run when child dependencies change.
+
+**Incorrect (parent memo tracks child signals):**
+
+```typescript
+const Wrapper = (props) => {
+  const output = createMemo(() => {
+    const data = fetchData()
+    // BAD: if props.children accesses its own signals, this memo
+    // will re-run whenever those child signals change too
+    return props.children(data)
+  })
+
+  return <div>{output()}</div>
+}
+```
+
+**Correct (untrack prevents parent from subscribing to child signals):**
+
+```typescript
+const Wrapper = (props) => {
+  const output = createMemo(() => {
+    const data = fetchData()
+    // GOOD: parent memo only tracks fetchData(), not child internals
+    return untrack(() => props.children(data))
+  })
+
+  return <div>{output()}</div>
+}
+```
+
+**This is how Solid's built-in components work internally:**
+
+```typescript
+// Simplified <Show> implementation from solid-js source:
+return createMemo(() => {
+  const c = condition()
+  if (c) {
+    // Children are called inside untrack to prevent Show
+    // from subscribing to the child's dependencies
+    return untrack(() => child(c))
+  }
+  return fallback
+})
+```
+
+**Common scenarios where this matters:**
+
+```typescript
+// Render prop components
+const DataProvider = (props) => {
+  const data = createResource(/* ... */)
+
+  return createMemo(() => {
+    const d = data()
+    return d ? untrack(() => props.render(d)) : props.fallback
+  })
+}
+
+// Custom control flow
+const When = (props) => {
+  return createMemo(() => {
+    return props.condition()
+      ? untrack(() => props.children())
+      : null
+  })
+}
+```
+
+**Notes:**
+- `untrack` prevents the current computation from subscribing to signals read inside the callback — the child's own effects still track normally
+- This is critical for control-flow components and any component that calls render callbacks inside `createMemo` or `createEffect`
+- If you're building a component library, audit every place you call `props.children` inside a tracked scope
+- SolidJS's `<Show>`, `<Switch>`, `<For>` all use this pattern internally
+
+Reference: [SolidJS untrack](https://docs.solidjs.com/reference/reactive-utilities/untrack)
+
+---
 
 # 2. Data Fetching & Server (CRITICAL)
-
 ## Guard .data Access to Prevent Unwanted Suspense
 
 **Impact: CRITICAL (entire UI replaced by skeleton when any query loads)**
@@ -565,7 +762,6 @@ query.isLoading ? defaultValue : query.data?.someProperty
 Reference: [SolidJS Suspense](https://docs.solidjs.com/reference/components/suspense)
 
 ---
-
 ## Include All Dependencies in Query Keys
 
 **Impact: HIGH (stale data served from wrong cache entry)**
@@ -597,7 +793,6 @@ function UserPosts(props: { userId: Accessor<string> }) {
 Reference: [TanStack Query Keys](https://tanstack.com/query/latest/docs/framework/solid/guides/query-keys)
 
 ---
-
 ## Invalidate Queries After Mutations
 
 **Impact: HIGH (stale UI after mutations causes user confusion)**
@@ -647,7 +842,6 @@ function UpdateButton(props: { userId: string }) {
 - Wrap the mutation options in an arrow function (Solid Query requires it for reactivity)
 
 ---
-
 ## Never Destructure Solid Query Results
 
 **Impact: CRITICAL (query state frozen — loading/error/data never update)**
@@ -681,7 +875,6 @@ return <div>{query.isLoading ? "Loading..." : query.data?.length}</div>
 Reference: [TanStack Solid Query](https://tanstack.com/query/latest/docs/solid/overview)
 
 ---
-
 ## Don't Create Query Waterfalls
 
 **Impact: CRITICAL (2-5× slower load times from sequential fetching)**
@@ -727,7 +920,6 @@ Only use `enabled` when there's a genuine data dependency (e.g., fetch user's po
 Reference: [TanStack Query Dependent Queries](https://tanstack.com/query/latest/docs/framework/solid/guides/dependent-queries)
 
 ---
-
 ## Wrap Query Options in Arrow Function
 
 **Impact: HIGH (reactive query keys don't update — queries never refetch)**
@@ -758,9 +950,239 @@ This applies to `createQuery`, `createMutation`, and `createInfiniteQuery`.
 Reference: [TanStack Solid Query Overview](https://tanstack.com/query/latest/docs/solid/overview)
 
 ---
+## Use resource.latest for Consistent Stale-While-Revalidate UI
+
+**Impact: MEDIUM (inconsistent data display during error states and initial loads)**
+
+`resource()` and `resource.latest` both retain the previous value during refetch (state: `"refreshing"`). The key difference is error handling: `resource()` throws on error (triggering ErrorBoundary), while `resource.latest` returns the last successful value. Use `resource.latest` when you want to keep showing data even after an error, and pair with `resource.loading` / `resource.state` for loading indicators.
+
+**Basic pattern — loading indicator without Suspense fallback flash:**
+
+```typescript
+const [page, setPage] = createSignal(1)
+const [data] = createResource(page, fetchPage)
+
+return (
+  <div>
+    <Show when={data.loading}>
+      <div class="overlay-spinner" />  {/* Subtle loading indicator */}
+    </Show>
+    <div style={{ opacity: data.loading ? 0.6 : 1 }}>
+      {data.latest?.title}  {/* Shows previous page during load AND errors */}
+    </div>
+  </div>
+)
+```
+
+**resource() vs resource.latest:**
+
+| Accessor | Initial Load | Refetch (`"refreshing"`) | On Error |
+|----------|-------------|--------------------------|----------|
+| `resource()` | `undefined` | Previous value | Throws (triggers ErrorBoundary) |
+| `resource.latest` | `undefined` | Previous value | Last successful value |
+
+**When resource.latest matters most — error resilience:**
+
+```typescript
+// resource() throws on error → ErrorBoundary catches it, UI replaced
+// resource.latest returns last good value → data stays visible
+
+<ErrorBoundary fallback={<ErrorPanel />}>
+  <div>{data()?.title}</div>  {/* Replaced by ErrorPanel on error */}
+</ErrorBoundary>
+
+// vs
+
+<div>
+  <Show when={data.error}>
+    <div class="error-banner">{data.error.message}</div>
+  </Show>
+  <div>{data.latest?.title}</div>  {/* Still shows last successful data */}
+</div>
+```
+
+**Combine with useTransition for route-level transitions:**
+
+```typescript
+const [isPending, start] = useTransition()
+const navigate = (page: number) => start(() => setPage(page))
+
+// isPending() is true while new data loads — dim the current content
+<div style={{ opacity: isPending() ? 0.6 : 1 }}>
+  <PageContent data={data} />
+</div>
+```
+
+**With initialValue for type safety:**
+
+```typescript
+// Without initialValue: data() can be undefined during initial load
+const [data] = createResource(source, fetcher)
+
+// With initialValue: data() always returns T (never undefined)
+const [data] = createResource(source, fetcher, { initialValue: [] })
+// data.latest is also always T
+```
+
+**Notes:**
+- During refetch, both `resource()` and `resource.latest` return the previous value — the difference is only on error
+- `resource.latest` is most valuable for error-resilient UIs where you want data to remain visible
+- Use `resource.state` for fine-grained status: `"unresolved"`, `"pending"`, `"ready"`, `"refreshing"`, `"errored"`
+- Pair with `data.loading` for subtle loading indicators (opacity, overlay spinners)
+- This pattern is especially valuable for pagination, search-as-you-type, and dashboard auto-refresh
+
+Reference: [SolidJS createResource](https://docs.solidjs.com/reference/basic-reactivity/create-resource)
+
+---
 
 # 3. Component Patterns (HIGH)
+## Use children() Helper to Resolve and Memoize Children
 
+**Impact: MEDIUM (repeated expensive child evaluation, inability to inspect/manipulate children)**
+
+When you need to inspect, iterate, or manipulate `props.children`, use the `children()` helper from `solid-js`. It resolves reactive children (functions, fragments) into resolved child values and memoizes the result. Resolved children can be DOM nodes, text nodes, primitives, JSX elements, or null.
+
+**Incorrect (accessing props.children directly for manipulation):**
+
+```typescript
+const Wrapper = (props) => {
+  // BAD: props.children might be a function, fragment, or reactive expression
+  // Accessing it multiple times re-evaluates each time
+  createEffect(() => {
+    console.log(props.children) // Could be a getter, not resolved values
+  })
+
+  return <div>{props.children}</div>
+}
+```
+
+**Correct (children() resolves and memoizes):**
+
+```typescript
+import { children, createEffect } from "solid-js"
+
+const ColoredList = (props) => {
+  const resolved = children(() => props.children)
+
+  // resolved() returns resolved child values — safe to inspect/modify
+  createEffect(() => {
+    const nodes = resolved.toArray()
+    nodes.forEach((node, i) => {
+      if (node instanceof HTMLElement) {
+        node.style.color = i % 2 === 0 ? "red" : "blue"
+      }
+    })
+  })
+
+  return <div>{resolved()}</div>
+}
+```
+
+**When you need children() vs when you don't:**
+
+```typescript
+// DON'T need children() — just rendering children as-is
+const Card = (props) => <div class="card">{props.children}</div>
+
+// DO need children() — inspecting or transforming children
+const Tabs = (props) => {
+  const tabs = children(() => props.children)
+
+  return (
+    <div>
+      <div class="tab-bar">
+        <For each={tabs.toArray()}>
+          {(tab) => <button>{(tab as HTMLElement).dataset.label}</button>}
+        </For>
+      </div>
+      <div class="tab-content">{tabs()}</div>
+    </div>
+  )
+}
+```
+
+**Notes:**
+- `children()` returns a memo — call it as `resolved()` to get the resolved value
+- Use `.toArray()` to get a flat array of all child nodes
+- Only use `children()` when you need to inspect or manipulate — for simple pass-through, `props.children` is fine
+- The helper handles all child types: static elements, dynamic expressions, arrays, and fragments
+
+Reference: [SolidJS children helper](https://docs.solidjs.com/reference/component-apis/children)
+
+---
+## Use Dynamic for Polymorphic Components
+
+**Impact: MEDIUM (verbose conditional JSX for component-switching, duplicated prop spreading)**
+
+When a component needs to render as different elements or components based on a prop, use `<Dynamic>` instead of conditional branches. This is the standard pattern for "render as" / polymorphic component APIs.
+
+**Incorrect (duplicated JSX branches):**
+
+```typescript
+const Button = (props) => {
+  const [local, rest] = splitProps(props, ["as", "children"])
+
+  // BAD: duplicate prop spreading, grows with each variant
+  if (local.as === "a") return <a {...rest}>{local.children}</a>
+  if (local.as === "link") return <A {...rest}>{local.children}</A>
+  return <button {...rest}>{local.children}</button>
+}
+```
+
+**Correct (Dynamic handles component switching):**
+
+```typescript
+import { Dynamic } from "solid-js/web"
+
+const Button = (props) => {
+  const [local, rest] = splitProps(props, ["as", "children", "class"])
+
+  return (
+    <Dynamic
+      component={local.as ?? "button"}
+      class={`btn ${local.class ?? ""}`}
+      {...rest}
+    >
+      {local.children}
+    </Dynamic>
+  )
+}
+
+// Usage:
+<Button>Click me</Button>              // renders <button>
+<Button as="a" href="/about">Link</Button>  // renders <a>
+<Button as={Link} to="/home">Route</Button> // renders <Link> component
+```
+
+**Common use cases:**
+
+```typescript
+// Heading level component
+const Heading = (props) => {
+  const [local, rest] = splitProps(props, ["level", "children"])
+  return (
+    <Dynamic component={`h${local.level ?? 1}`} {...rest}>
+      {local.children}
+    </Dynamic>
+  )
+}
+
+// Icon component selecting by name
+const Icon = (props) => {
+  const icons = { home: HomeIcon, settings: SettingsIcon, user: UserIcon }
+  return <Dynamic component={icons[props.name]} {...props} />
+}
+```
+
+**Notes:**
+- `component` accepts strings (`"div"`, `"a"`) or components (`MyComponent`)
+- When `component` is reactive, `Dynamic` handles unmounting/remounting automatically
+- Combine with `splitProps` to separate the `as`/`component` prop from pass-through props
+- This is how component libraries (Hope UI, Kobalte) implement their polymorphic APIs
+
+Reference: [SolidJS Dynamic](https://docs.solidjs.com/reference/components/dynamic)
+
+---
 ## Use mergeProps for Default Values
 
 **Impact: HIGH (broken reactivity on defaulted props)**
@@ -797,7 +1219,6 @@ function Button(props: { size?: "sm" | "md" | "lg" }) {
 Reference: [SolidJS mergeProps docs](https://docs.solidjs.com/reference/component-apis/merge-props)
 
 ---
-
 ## Don't Return Early Before Reactive Primitives
 
 **Impact: HIGH (hooks run inconsistently — effects and signals may not initialize)**
@@ -841,7 +1262,6 @@ function UserProfile(props) {
 Reference: [SolidJS Components](https://docs.solidjs.com/concepts/components/basics)
 
 ---
-
 ## Use splitProps for Prop Forwarding
 
 **Impact: HIGH (broken reactivity on extracted props)**
@@ -896,9 +1316,71 @@ function Button(props: ButtonProps) {
 Reference: [SolidJS splitProps docs](https://docs.solidjs.com/reference/component-apis/split-props)
 
 ---
+## Use Specific Component Type Annotations
+
+**Impact: MEDIUM (unclear children expectations, weaker type checking)**
+
+SolidJS provides four component type aliases with different `children` constraints. Use the most specific type so consumers know exactly what children are accepted.
+
+**The type hierarchy:**
+
+```typescript
+import type { Component, VoidComponent, ParentComponent, FlowComponent } from "solid-js"
+
+// Generic — no children constraint
+const Widget: Component<{ label: string }> = (props) => ...
+
+// No children allowed
+const Icon: VoidComponent<{ name: string }> = (props) => ...
+
+// Optional JSX.Element children
+const Card: ParentComponent<{ title: string }> = (props) => ...
+
+// Required children (often render callbacks)
+const Tooltip: FlowComponent<{ text: string }, JSX.Element> = (props) => ...
+```
+
+**When to use each:**
+
+| Type | Children | Use For |
+|------|----------|---------|
+| `VoidComponent<P>` | None | Leaf components: icons, inputs, badges |
+| `ParentComponent<P>` | Optional `JSX.Element` | Wrappers: cards, layouts, panels |
+| `FlowComponent<P, C>` | Required `C` (default `JSX.Element`) | Control flow: modals, render-prop components |
+| `Component<P>` | Unconstrained | When none of the above fit |
+
+**Example — VoidComponent prevents accidental children:**
+
+```typescript
+// TypeScript error if someone tries to pass children
+const Avatar: VoidComponent<{ src: string; alt: string }> = (props) => (
+  <img src={props.src} alt={props.alt} class="avatar" />
+)
+
+// TS Error: Property 'children' does not exist
+<Avatar src="pic.jpg" alt="User">Some text</Avatar>
+```
+
+**Example — FlowComponent for render props:**
+
+```typescript
+const Repeat: FlowComponent<{ times: number }, (i: number) => JSX.Element> = (props) => (
+  <For each={Array.from({ length: props.times }, (_, i) => i)}>
+    {(i) => props.children(i)}
+  </For>
+)
+```
+
+**Notes:**
+- Default to `VoidComponent` for leaf components — it catches accidental children at compile time
+- `ParentComponent` adds `children?: JSX.Element` to props automatically
+- These types are purely for TypeScript — they compile away with zero runtime cost
+
+Reference: [SolidJS Component types](https://docs.solidjs.com/reference/component-apis/component)
+
+---
 
 # 4. State Management (HIGH)
-
 ## Use Typed Context with Store for Global State
 
 **Impact: MEDIUM (type-safe global state with fine-grained reactivity)**
@@ -945,7 +1427,6 @@ export const useTheme = () => {
 Reference: [SolidJS Context](https://docs.solidjs.com/concepts/context)
 
 ---
-
 ## Use createStore for Multi-Field Form State
 
 **Impact: MEDIUM (over-rendering on every field change)**
@@ -1003,7 +1484,6 @@ const [form, setForm] = createStore({
 Reference: [SolidJS createStore docs](https://docs.solidjs.com/reference/store-utilities/create-store)
 
 ---
-
 ## Use produce() for Complex Store Mutations
 
 **Impact: HIGH (prevents missed reactivity on multi-field updates)**
@@ -1043,7 +1523,6 @@ setState(produce(draft => {
 - Import from `solid-js/store`, not `solid-js`
 
 ---
-
 ## Use reconcile for Fine-Grained Async Updates
 
 **Impact: MEDIUM-HIGH (entire list re-renders instead of minimal diff on refetch)**
@@ -1088,7 +1567,6 @@ const briefs = createAsync(async () => {
 Reference: [SolidJS reconcile](https://docs.solidjs.com/reference/store-utilities/reconcile)
 
 ---
-
 ## Choose Signal vs Store Based on Update Granularity
 
 **Impact: HIGH (over-updating or unnecessary complexity)**
@@ -1142,9 +1620,81 @@ setForm("name", "Alice")  // Only name field subscribers update
 Reference: [SolidJS Stores](https://docs.solidjs.com/concepts/stores)
 
 ---
+## Use Computed Getters in Stores for Derived Reactive Properties
+
+**Impact: MEDIUM (stale derived values or unnecessary effects to keep store properties in sync)**
+
+When a store property should be derived from other state (props, signals, or other store fields), define it as a getter in the initial `createStore` object. Getters are re-evaluated on each access, maintaining reactivity through the store proxy.
+
+**Incorrect (captured once — goes stale):**
+
+```typescript
+const [state, setState] = createStore({
+  firstName: "John",
+  lastName: "Doe",
+  fullName: "John Doe",  // BAD: static string, never updates
+})
+```
+
+**Incorrect (effect to sync — overly complex):**
+
+```typescript
+const [state, setState] = createStore({ firstName: "John", lastName: "Doe", fullName: "" })
+
+// BAD: unnecessary effect, extra update cycle
+createEffect(() => {
+  setState("fullName", `${state.firstName} ${state.lastName}`)
+})
+```
+
+**Correct (getter — always current, zero overhead):**
+
+```typescript
+const [state, setState] = createStore({
+  firstName: "John",
+  lastName: "Doe",
+  get fullName() { return `${this.firstName} ${this.lastName}` },
+})
+
+// state.fullName is always "John Doe" — updates when firstName or lastName change
+setState("firstName", "Jane")  // state.fullName is now "Jane Doe"
+```
+
+**Pattern: Bridge props into store with getters (from Hope UI, CodeImage):**
+
+```typescript
+const [state, setState] = createStore({
+  headerMounted: false,
+  bodyMounted: false,
+  // Reactive bridge from props — always reflects current prop value
+  get opened() { return props.opened },
+  get size() { return props.size ?? "md" },
+  get dialogId() { return props.id ?? defaultId },
+  get headerId() { return `${this.dialogId}--header` },
+})
+```
+
+**Pattern: Controlled/uncontrolled component with getter:**
+
+```typescript
+const [state, setState] = createStore({
+  _internalValue: props.defaultValue ?? "",
+  get isControlled() { return props.value !== undefined },
+  get value() { return this.isControlled ? props.value : this._internalValue },
+})
+```
+
+**Notes:**
+- Getters in stores use `this` to reference sibling properties — they compose naturally
+- Getters are NOT cached like `createMemo` — if the computation is expensive, combine with `createMemo` outside the store
+- This pattern replaces the common anti-pattern of syncing store state with effects
+- Classes (`Date`, `Map`, `Set`) are not wrapped by store proxies — getters returning these won't have granular reactivity on their internal properties
+
+Reference: [SolidJS Stores](https://docs.solidjs.com/concepts/stores)
+
+---
 
 # 5. Rendering & Control Flow (MEDIUM-HIGH)
-
 ## Wrap Risky Components in ErrorBoundary
 
 **Impact: HIGH (unhandled errors crash entire component tree)**
@@ -1197,7 +1747,6 @@ function App() {
 Reference: [SolidJS ErrorBoundary docs](https://docs.solidjs.com/reference/components/error-boundary)
 
 ---
-
 ## Choose Between For and Index Based on What Changes
 
 **Impact: MEDIUM (unnecessary re-renders in dynamic lists)**
@@ -1245,7 +1794,6 @@ import { For } from "solid-js"
 Reference: [SolidJS Index docs](https://docs.solidjs.com/reference/components/index-component)
 
 ---
-
 ## Place Suspense Inside Conditionals (LazyShow Pattern)
 
 **Impact: MEDIUM-HIGH (layout flicker when toggling modals/conditional content)**
@@ -1290,7 +1838,6 @@ function LazyShow<T>(props: {
 Reference: [SolidJS Suspense](https://docs.solidjs.com/reference/components/suspense)
 
 ---
-
 ## Use `<For>` Instead of .map() for Lists
 
 **Impact: CRITICAL (100-1000× more DOM operations — full remount on every update)**
@@ -1324,7 +1871,6 @@ const reversedMessages = createMemo(() => [...messages()].reverse())
 Reference: [SolidJS `<For>` Component](https://docs.solidjs.com/reference/components/for)
 
 ---
-
 ## Use `<Show>` Instead of JSX Conditionals
 
 **Impact: HIGH (component state lost, animations restart on condition toggle)**
@@ -1365,7 +1911,6 @@ Use `Switch`/`Match` for multi-branch conditionals:
 Reference: [SolidJS `<Show>` Component](https://docs.solidjs.com/reference/components/show)
 
 ---
-
 ## Use Switch/Match for Multi-Condition Rendering
 
 **Impact: MEDIUM (unreadable nested conditionals, potential remount bugs)**
@@ -1420,7 +1965,6 @@ Reference: [SolidJS Switch/Match docs](https://docs.solidjs.com/reference/compon
 ---
 
 # 6. SolidStart Patterns (MEDIUM-HIGH)
-
 ## Use createAsync + query() for Data Loading in SolidStart
 
 **Impact: HIGH (missing cache dedup, improper invalidation, waterfall fetches)**
@@ -1471,7 +2015,6 @@ function UserPage() {
 Reference: [SolidStart Data Loading](https://docs.solidjs.com/solid-start/building-your-application/data-loading)
 
 ---
-
 ## Always Define Route Preload Functions
 
 **Impact: HIGH (data fetches delayed until after navigation completes and component renders)**
@@ -1516,7 +2059,6 @@ function UserPage() {
 Reference: [SolidStart Routing](https://docs.solidjs.com/solid-start/building-your-application/routing)
 
 ---
-
 ## Always Validate "use server" Function Inputs
 
 **Impact: CRITICAL (security vulnerability — client can send any data across RPC boundary)**
@@ -1569,7 +2111,6 @@ Reference: [SolidStart "use server"](https://docs.solidjs.com/solid-start/refere
 ---
 
 # 7. Performance Optimization (MEDIUM)
-
 ## Use createSelector for Single-Selection in Large Lists
 
 **Impact: MEDIUM (O(1) updates instead of O(n) — only 2 items update on selection change)**
@@ -1612,7 +2153,6 @@ Use for lists with 50+ items where selection performance matters.
 Reference: [SolidJS createSelector](https://docs.solidjs.com/reference/reactive-utilities/create-selector)
 
 ---
-
 ## Lazy Load Heavy Components
 
 **Impact: MEDIUM (30-60% initial bundle reduction for modal-heavy apps)**
@@ -1659,7 +2199,6 @@ Always pair with Suspense and skeleton components for a smooth loading experienc
 Reference: [SolidJS lazy](https://docs.solidjs.com/reference/component-apis/lazy)
 
 ---
-
 ## Use createMemo for Expensive Derived Computations
 
 **Impact: MEDIUM (prevents redundant expensive recomputations)**
@@ -1713,7 +2252,6 @@ const name = createMemo(() => user().name)
 - Don't wrap simple getters or property access — the memo overhead costs more than it saves
 
 ---
-
 ## Use createRenderEffect for Synchronous DOM Measurements
 
 **Impact: MEDIUM (layout flicker from deferred DOM reads)**
@@ -1765,7 +2303,6 @@ function AutoLayout() {
 Reference: [SolidJS createRenderEffect docs](https://docs.solidjs.com/reference/secondary-primitives/create-render-effect)
 
 ---
-
 ## Use lazy() for Route-Level Code Splitting
 
 **Impact: HIGH (reduces initial bundle by 40-70% in multi-route apps)**
@@ -1825,7 +2362,6 @@ function App() {
 - Don't lazy-load the home/landing route — it should be in the main bundle
 
 ---
-
 ## Use Skeleton Components as Suspense Fallbacks
 
 **Impact: MEDIUM (layout shift and visual jank during loading)**
@@ -1876,7 +2412,6 @@ function DashboardSkeleton() {
 Reference: [SolidJS Suspense docs](https://docs.solidjs.com/reference/components/suspense)
 
 ---
-
 ## Use useTransition for Non-Blocking Async Updates
 
 **Impact: MEDIUM (UI freezes during async state transitions)**
@@ -1939,7 +2474,6 @@ Reference: [SolidJS useTransition docs](https://docs.solidjs.com/reference/react
 ---
 
 # 8. Testing (LOW-MEDIUM)
-
 ## Use waitFor for Async Component Assertions
 
 **Impact: LOW (flaky tests from timing-dependent assertions)**
@@ -1985,7 +2519,6 @@ it("shows user data", async () => {
 Reference: [Solid Testing Library docs](https://github.com/solidjs/solid-testing-library)
 
 ---
-
 ## Wrap Reactive Test Code in createRoot
 
 **Impact: LOW-MEDIUM (leaked reactive contexts, orphaned effects in tests)**
@@ -2030,7 +2563,6 @@ it("increments counter", () => {
 Reference: [Solid Testing Library](https://github.com/solidjs/solid-testing-library)
 
 ---
-
 ## Use vi.hoisted for Mock Definitions
 
 **Impact: LOW (mock reference errors or stale mock state)**
@@ -2085,7 +2617,6 @@ beforeEach(() => {
 Reference: [Vitest vi.hoisted docs](https://vitest.dev/api/vi.html#vi-hoisted)
 
 ---
-
 ## Use render() and Testing Library for Component Tests
 
 **Impact: MEDIUM (correct component testing prevents false positives)**
@@ -2128,7 +2659,6 @@ describe("Counter", () => {
 - Use `vi.hoisted()` with `vi.mock()` for proper mock hoisting in vitest
 
 ---
-
 ## Use renderHook for Testing Custom Hooks
 
 **Impact: LOW (boilerplate-heavy tests or missing reactive context)**
@@ -2176,7 +2706,6 @@ Reference: [Solid Testing Library docs](https://github.com/solidjs/solid-testing
 ---
 
 # 9. External Interop (LOW)
-
 ## Use from() to Bridge Browser APIs into Reactive Signals
 
 **Impact: LOW (clean reactive integration with matchMedia, ResizeObserver, WebSocket)**
@@ -2221,7 +2750,6 @@ const isWidescreen = useMediaQuery("(min-width: 1280px)")
 Reference: [SolidJS from()](https://docs.solidjs.com/reference/reactive-utilities/from)
 
 ---
-
 ## Use observable to Export Signals to External Libraries
 
 **Impact: LOW (manual subscription glue code)**
@@ -2274,5 +2802,4 @@ search$.pipe(
 
 Reference: [SolidJS observable docs](https://docs.solidjs.com/reference/secondary-primitives/observable)
 
----
-
+<!-- Generated from rules/ directory. Do not edit directly. -->
