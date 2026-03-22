@@ -1,10 +1,13 @@
 # SolidJS Patterns — Complete Rule Reference
 
-Auto-generated compiled document of all 57 rules. For individual rules, see `rules/`.
+> **74 rules** across 9 sections, ordered by impact.
 
 ---
 
-# 1. Reactivity Correctness (CRITICAL)
+# 1. Reactivity Correctness
+
+**Impact: CRITICAL** — SolidJS's fine-grained reactivity is its core advantage but also the #1 source of bugs. Signals must be read inside reactive contexts, stores must not be destructured, and tracking scopes must be understood. Getting reactivity wrong silently breaks your UI.
+
 ## Batch Multiple Signal Updates to Prevent Intermediate Renders
 
 **Impact: MEDIUM (unnecessary intermediate re-renders when updating multiple signals)**
@@ -76,6 +79,44 @@ fetch(url).then(data => batch(() => {
 Reference: [SolidJS batch](https://docs.solidjs.com/reference/reactive-utilities/batch)
 
 ---
+
+## Chain createMemo for Multi-Step Derived State
+
+**Impact: MEDIUM (prevents redundant recomputation in derived state chains)**
+
+When derived state has multiple stages (filter → sort → count), chain `createMemo` calls so each intermediate result is cached independently. Downstream memos only recompute when their specific input changes.
+
+**Incorrect (single monolithic derivation):**
+
+```tsx
+// Recomputes everything when any signal changes
+const result = createMemo(() => {
+  const filtered = items().filter((i) => i.category === filter());
+  const sorted = filtered.sort((a, b) => a[sortBy()] - b[sortBy()]);
+  return { items: sorted, count: sorted.length };
+});
+```
+
+**Correct (chained memos with independent caching):**
+
+```tsx
+const filteredItems = createMemo(() =>
+  items().filter((i) => i.category === filter())
+);
+
+const sortedItems = createMemo(() =>
+  [...filteredItems()].sort((a, b) => a[sortBy()] - b[sortBy()])
+);
+
+const itemCount = createMemo(() => filteredItems().length);
+```
+
+Now when `sortBy` changes, only `sortedItems` recomputes — `filteredItems` and `itemCount` are cached. When `filter` changes, `filteredItems` recomputes first, then `sortedItems` and `itemCount` update only if the filtered result actually changed.
+
+Reference: [SolidJS Docs - createMemo](https://docs.solidjs.com/reference/basic-reactivity/create-memo)
+
+---
+
 ## Always Clean Up Effects with onCleanup
 
 **Impact: HIGH (memory leaks from unremoved listeners, timers, subscriptions)**
@@ -104,6 +145,7 @@ Always clean up: event listeners, setInterval/setTimeout, WebSocket connections,
 Reference: [SolidJS onCleanup](https://docs.solidjs.com/reference/lifecycle/on-cleanup)
 
 ---
+
 ## Use createDeferred for Expensive Computations on Rapid Input
 
 **Impact: MEDIUM (prevents UI jank during rapid updates)**
@@ -145,6 +187,7 @@ const results = createMemo(() =>
 - Prefer over manual `setTimeout`/debounce patterns for reactive values
 
 ---
+
 ## Use createReaction to Separate Tracking from Side Effects
 
 **Impact: LOW (fine-grained control over effect triggers)**
@@ -179,6 +222,7 @@ track(() => user().id)
 - Useful for preventing unnecessary effect re-runs on complex objects
 
 ---
+
 ## Derive State with Functions or Memos, Not Effects
 
 **Impact: HIGH (unnecessary re-renders, potential infinite loops, and harder-to-trace data flow)**
@@ -236,6 +280,7 @@ const filteredItems = createMemo(() =>
 Reference: [SolidJS Derived Signals](https://docs.solidjs.com/concepts/derived-values/derived-signals)
 
 ---
+
 ## Never Destructure Props
 
 **Impact: CRITICAL (silent reactivity loss — UI stops updating)**
@@ -274,6 +319,7 @@ function Badge(props: BadgeProps) {
 Reference: [SolidJS Props Documentation](https://docs.solidjs.com/concepts/components/props)
 
 ---
+
 ## Never Mutate Store Values Directly
 
 **Impact: CRITICAL (mutations silently ignored — UI doesn't update)**
@@ -306,6 +352,7 @@ setState(produce(state => {
 Reference: [SolidJS Stores](https://docs.solidjs.com/concepts/stores)
 
 ---
+
 ## Don't Assume Effect Execution Order
 
 **Impact: HIGH (intermittent bugs from effects running in unexpected order)**
@@ -351,6 +398,7 @@ createEffect(() => {
 Reference: [SolidJS Effects](https://docs.solidjs.com/concepts/effects)
 
 ---
+
 ## Access Signals/Stores Directly in JSX
 
 **Impact: CRITICAL (silent tracking loss — UI stops reacting to changes)**
@@ -392,6 +440,7 @@ const getCount = () => count()
 Reference: [SolidJS Reactivity](https://docs.solidjs.com/concepts/intro-to-reactivity)
 
 ---
+
 ## Use splitProps Instead of Rest Spread
 
 **Impact: CRITICAL (extracted props lose reactivity silently)**
@@ -430,6 +479,7 @@ function Button(props: ButtonProps) {
 Reference: [SolidJS splitProps](https://docs.solidjs.com/reference/component-apis/split-props)
 
 ---
+
 ## Use Store Instead of Set/Map with Signal
 
 **Impact: CRITICAL (O(n) updates instead of O(1) — all subscribers re-run)**
@@ -477,6 +527,7 @@ const toggle = (index: number) => {
 Reference: [SolidJS Stores](https://docs.solidjs.com/concepts/stores)
 
 ---
+
 ## Do Not Capture Signals in Closures Outside Reactive Context
 
 **Impact: HIGH (stale values in event handlers and callbacks)**
@@ -527,6 +578,59 @@ createEffect(() => {
 Reference: [SolidJS reactivity docs](https://docs.solidjs.com/concepts/reactivity)
 
 ---
+
+## Don't Capture Signals During Handler Setup
+
+**Impact: CRITICAL (causes stale closures and silent state bugs)**
+
+When signals are read during effect setup (not inside the returned callback), the value is captured once and becomes stale. Always read signals at execution time — inside the event handler or callback body itself.
+
+**Incorrect (signal captured at setup time):**
+
+```tsx
+createEffect(() => {
+  const currentPage = page(); // captured once when effect runs
+  document.addEventListener("scroll", () => {
+    console.log("Page:", currentPage); // always logs the initial value
+  });
+});
+```
+
+**Incorrect (signal read outside handler):**
+
+```tsx
+const [count, setCount] = createSignal(0);
+const value = count(); // captured once at component setup
+return <button onClick={() => alert(value)}>Show count</button>;
+// Always alerts 0, even after setCount(5)
+```
+
+**Correct (read signal at execution time):**
+
+```tsx
+createEffect(() => {
+  const handler = () => {
+    console.log("Page:", page()); // read at scroll time — always current
+  };
+  document.addEventListener("scroll", handler);
+  onCleanup(() => document.removeEventListener("scroll", handler));
+});
+```
+
+**Correct (read signal inside handler):**
+
+```tsx
+const [count, setCount] = createSignal(0);
+return <button onClick={() => alert(count())}>Show count</button>;
+// Always alerts the current value
+```
+
+The key principle: signal getter calls (`signal()`) must happen at the moment you need the value, not ahead of time.
+
+Reference: [SolidJS Docs - Reactivity](https://docs.solidjs.com/concepts/intro-to-reactivity)
+
+---
+
 ## Use on() to Break Circular Dependencies
 
 **Impact: HIGH (infinite effect loops from reading and writing the same signal)**
@@ -574,6 +678,7 @@ createEffect(() => {
 Reference: [SolidJS on()](https://docs.solidjs.com/reference/reactive-utilities/on)
 
 ---
+
 ## Use Signals for Timing-Sensitive State, Not Refs
 
 **Impact: CRITICAL (closures capture stale ref values — race conditions and bugs)**
@@ -625,6 +730,7 @@ createEffect(() => {
 Reference: [SolidJS Signals](https://docs.solidjs.com/concepts/signals)
 
 ---
+
 ## Use untrack When Invoking Render Callbacks
 
 **Impact: MEDIUM (parent computations subscribe to signals inside child render functions)**
@@ -708,7 +814,132 @@ Reference: [SolidJS untrack](https://docs.solidjs.com/reference/reactive-utiliti
 
 ---
 
-# 2. Data Fetching & Server (CRITICAL)
+## Use untrack() for Surgical Dependency Opt-Out
+
+**Impact: MEDIUM (prevents unwanted effect re-runs from incidental signal reads)**
+
+`untrack()` reads a signal's value without creating a reactive dependency. Use it when you need to read a signal inside a tracking scope (effect, memo) but don't want that read to trigger re-execution. This is distinct from `on()`, which explicitly lists what to track.
+
+**Incorrect (incidental dependency causes extra re-runs):**
+
+```tsx
+createEffect(() => {
+  // Re-runs when EITHER searchQuery or debugMode changes
+  console.log(`[debug=${debugMode()}] Searching: ${searchQuery()}`);
+  performSearch(searchQuery());
+});
+```
+
+**Correct (untrack the incidental read):**
+
+```tsx
+import { untrack } from "solid-js";
+
+createEffect(() => {
+  // Only re-runs when searchQuery changes
+  console.log(`[debug=${untrack(debugMode)}] Searching: ${searchQuery()}`);
+  performSearch(searchQuery());
+});
+```
+
+**Common use cases:**
+
+```tsx
+// Read initial value without tracking
+const initialValue = untrack(count);
+
+// Log without creating dependency
+createEffect(() => {
+  const result = computeResult(input());
+  console.log("Previous count was:", untrack(count));
+  setOutput(result);
+});
+
+// Conditional tracking
+createEffect(() => {
+  const mode = trackingMode();
+  if (mode === "detailed") {
+    doDetailed(details()); // tracked
+  } else {
+    doSimple(untrack(details)); // not tracked in simple mode
+  }
+});
+```
+
+**When to use `untrack()` vs `on()`:**
+- `untrack()` — opt OUT of tracking specific reads within an effect
+- `on()` — opt IN to tracking specific signals (ignore everything else)
+
+Reference: [SolidJS Docs - untrack](https://docs.solidjs.com/reference/reactive-utilities/untrack)
+
+---
+
+# 2. Data Fetching & Server
+
+**Impact: CRITICAL** — Correct data fetching patterns (createAsync, query, createResource, Solid Query) prevent waterfalls, avoid Suspense traps, and keep UIs responsive. SolidStart server functions ("use server") require input validation at the boundary.
+
+## Use createResource for Standalone Async Data
+
+**Impact: MEDIUM (provides built-in loading/error states and Suspense integration)**
+
+For non-SolidStart apps (or when you don't need Solid Router's caching), `createResource` is the built-in primitive for async data. It provides reactive loading/error states, integrates with Suspense, and supports `mutate` for optimistic updates.
+
+**Incorrect (manual async state management):**
+
+```tsx
+function UserProfile(props) {
+  const [user, setUser] = createSignal(null);
+  const [loading, setLoading] = createSignal(true);
+  const [error, setError] = createSignal(null);
+
+  createEffect(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchUser(props.id());
+      setUser(data);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setLoading(false);
+    }
+  });
+  // Async in createEffect breaks tracking, manual state is error-prone
+}
+```
+
+**Correct (createResource with Suspense):**
+
+```tsx
+import { createResource, Suspense, Show } from "solid-js";
+
+function UserProfile(props) {
+  const [user, { mutate, refetch }] = createResource(
+    () => props.id(),   // reactive source — refetches when id changes
+    (id) => fetchUser(id) // fetcher function
+  );
+
+  return (
+    <Show when={!user.error} fallback={<p>Error: {user.error.message}</p>}>
+      <div>{user()?.name}</div>
+    </Show>
+  );
+}
+
+// Wrap with Suspense for loading states
+<Suspense fallback={<Skeleton />}>
+  <UserProfile id={userId} />
+</Suspense>
+```
+
+**When to use which:**
+- `createResource` — standalone apps, simple fetching with mutate/refetch
+- `createAsync` + `query` — SolidStart/Solid Router apps with route-level caching
+- Solid Query — complex caching, pagination, infinite scroll, background refetching
+
+Reference: [SolidJS Docs - createResource](https://docs.solidjs.com/reference/basic-reactivity/create-resource)
+
+---
+
 ## Guard .data Access to Prevent Unwanted Suspense
 
 **Impact: CRITICAL (entire UI replaced by skeleton when any query loads)**
@@ -762,6 +993,7 @@ query.isLoading ? defaultValue : query.data?.someProperty
 Reference: [SolidJS Suspense](https://docs.solidjs.com/reference/components/suspense)
 
 ---
+
 ## Include All Dependencies in Query Keys
 
 **Impact: HIGH (stale data served from wrong cache entry)**
@@ -793,6 +1025,7 @@ function UserPosts(props: { userId: Accessor<string> }) {
 Reference: [TanStack Query Keys](https://tanstack.com/query/latest/docs/framework/solid/guides/query-keys)
 
 ---
+
 ## Invalidate Queries After Mutations
 
 **Impact: HIGH (stale UI after mutations causes user confusion)**
@@ -842,6 +1075,7 @@ function UpdateButton(props: { userId: string }) {
 - Wrap the mutation options in an arrow function (Solid Query requires it for reactivity)
 
 ---
+
 ## Never Destructure Solid Query Results
 
 **Impact: CRITICAL (query state frozen — loading/error/data never update)**
@@ -875,6 +1109,7 @@ return <div>{query.isLoading ? "Loading..." : query.data?.length}</div>
 Reference: [TanStack Solid Query](https://tanstack.com/query/latest/docs/solid/overview)
 
 ---
+
 ## Don't Create Query Waterfalls
 
 **Impact: CRITICAL (2-5× slower load times from sequential fetching)**
@@ -920,6 +1155,91 @@ Only use `enabled` when there's a genuine data dependency (e.g., fetch user's po
 Reference: [TanStack Query Dependent Queries](https://tanstack.com/query/latest/docs/framework/solid/guides/dependent-queries)
 
 ---
+
+## Solid Query Integrates with Suspense Automatically
+
+**Impact: MEDIUM (eliminates boilerplate loading state management)**
+
+Unlike React Query where you opt in with `useSuspenseQuery` or `suspense: true`, Solid Query queries automatically suspend inside `<Suspense>` boundaries. Any `createQuery` call nested within a Suspense boundary will trigger the fallback while loading — no configuration needed.
+
+**Incorrect (React Query pattern — unnecessary in Solid):**
+
+```tsx
+// Don't copy this from React Query docs
+const user = createQuery(() => ({
+  queryKey: ["user", id()],
+  queryFn: fetchUser,
+  suspense: true, // This option doesn't exist in Solid Query
+}));
+```
+
+**Correct (just wrap with Suspense):**
+
+```tsx
+function UserProfile(props) {
+  const user = createQuery(() => ({
+    queryKey: ["user", props.id()],
+    queryFn: () => fetchUser(props.id()),
+  }));
+
+  // query.data is available directly — Suspense handles the loading state
+  return <div>{user.data?.name}</div>;
+}
+
+// Parent provides the Suspense boundary
+<Suspense fallback={<Skeleton />}>
+  <UserProfile id={userId} />
+</Suspense>
+```
+
+Similarly, `notifyOnChangeProps` is unnecessary — SolidJS's fine-grained reactivity automatically tracks which query properties (`.data`, `.isLoading`, etc.) are accessed in JSX.
+
+Reference: [TanStack Solid Query Overview](https://tanstack.com/query/latest/docs/solid/overview)
+
+---
+
+## Use enabled Option for Conditional Queries
+
+**Impact: HIGH (prevents unnecessary network requests and runtime errors from missing dependencies)**
+
+Solid Query's `enabled` option controls when a query should execute. Use it with signal-derived booleans to defer fetching until prerequisite data is available. Without it, queries fire immediately — even when required parameters are undefined.
+
+**Incorrect (query fires before dependency is ready):**
+
+```tsx
+const messages = createQuery(() => ({
+  queryKey: ["messages", props.conversationId()],
+  queryFn: () => fetchMessages(props.conversationId()),
+  // Fires immediately, even when conversationId is undefined
+}));
+```
+
+**Correct (query deferred until dependency exists):**
+
+```tsx
+const messages = createQuery(() => ({
+  queryKey: ["messages", props.conversationId()],
+  queryFn: () => fetchMessages(props.conversationId()!),
+  enabled: !!props.conversationId(),
+}));
+```
+
+**Correct (multiple conditions):**
+
+```tsx
+const analytics = createQuery(() => ({
+  queryKey: ["analytics", userId(), dateRange()],
+  queryFn: () => fetchAnalytics(userId()!, dateRange()!),
+  enabled: !!userId() && !!dateRange(),
+}));
+```
+
+The `enabled` option is reactive — when the signal changes from falsy to truthy, the query automatically starts fetching. No manual `refetch()` needed.
+
+Reference: [Solid Query - Disabling/Pausing Queries](https://tanstack.com/query/latest/docs/solid/guides/disabling-queries)
+
+---
+
 ## Wrap Query Options in Arrow Function
 
 **Impact: HIGH (reactive query keys don't update — queries never refetch)**
@@ -950,6 +1270,7 @@ This applies to `createQuery`, `createMutation`, and `createInfiniteQuery`.
 Reference: [TanStack Solid Query Overview](https://tanstack.com/query/latest/docs/solid/overview)
 
 ---
+
 ## Use resource.latest for Consistent Stale-While-Revalidate UI
 
 **Impact: MEDIUM (inconsistent data display during error states and initial loads)**
@@ -1035,7 +1356,166 @@ Reference: [SolidJS createResource](https://docs.solidjs.com/reference/basic-rea
 
 ---
 
-# 3. Component Patterns (HIGH)
+# 3. Component Patterns
+
+**Impact: HIGH** — Props handling (splitProps, mergeProps), children patterns, and component composition are unique in SolidJS. Destructuring breaks reactivity, rest spread loses tracking, and component functions run once (not per-render like React).
+
+## Use Kobalte for Accessible Interactive Widgets
+
+**Impact: MEDIUM-HIGH (missing focus trapping, ARIA roles, keyboard navigation)**
+
+Complex interactive widgets (dialogs, selects, comboboxes, tabs, menus) require WAI-ARIA patterns, focus trapping, keyboard navigation, and screen reader announcements. Kobalte (`@kobalte/core`) handles all of this for SolidJS. Rolling your own is error-prone and incomplete.
+
+**Incorrect (DIY modal — no focus trap, no ARIA, no keyboard handling):**
+
+```typescript
+function Modal(props: { open: boolean; onClose: () => void; children: JSX.Element }) {
+  return (
+    <Show when={props.open}>
+      <div class="overlay" onClick={props.onClose}>
+        <div class="modal" onClick={(e) => e.stopPropagation()}>
+          <button onClick={props.onClose}>X</button>
+          {props.children}
+        </div>
+      </div>
+    </Show>
+  )
+}
+// Missing: role="dialog", aria-modal, focus trap, Escape key,
+// focus restoration, scroll lock, aria-labelledby
+```
+
+**Correct (Kobalte Dialog — complete accessibility out of the box):**
+
+```typescript
+import { Dialog } from "@kobalte/core/dialog"
+
+function Modal(props: { children: JSX.Element }) {
+  return (
+    <Dialog>
+      <Dialog.Trigger>Open</Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay class="fixed inset-0 bg-black/50" />
+        <Dialog.Content class="fixed inset-0 m-auto max-w-lg rounded-lg bg-white p-6">
+          <Dialog.Title>Confirm Action</Dialog.Title>
+          <Dialog.Description>This will apply changes.</Dialog.Description>
+          {props.children}
+          <Dialog.CloseButton>Close</Dialog.CloseButton>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog>
+  )
+}
+```
+
+**Kobalte Dialog provides automatically:**
+- `role="dialog"` and `aria-modal="true"`
+- Focus trapping within the dialog
+- Escape key closes the dialog
+- Focus restores to the trigger on close
+- Scroll locking on the body
+- Click-outside dismissal
+
+**Import from subpaths (barrel import is deprecated):**
+
+```typescript
+// Correct
+import { Dialog } from "@kobalte/core/dialog"
+import { Select } from "@kobalte/core/select"
+import { Tabs } from "@kobalte/core/tabs"
+
+// Wrong — deprecated barrel export
+import { Dialog } from "@kobalte/core"
+```
+
+**Key points:**
+- Kobalte is unstyled — zero CSS shipped, bring your own styles or use shadcn-solid
+- Use Kobalte for: Dialog, Select, Combobox, Tabs, Menu, Toast, Popover, Tooltip
+- For simple toggles, manual `aria-expanded` + `role="region"` is fine (see component-aria-live-dynamic)
+
+Reference: [Kobalte Documentation](https://kobalte.dev)
+
+---
+
+## Use ARIA Live Regions for Dynamic Content Updates
+
+**Impact: MEDIUM (screen readers miss content changes from Show/For toggling)**
+
+When content appears or changes dynamically via `<Show>` or `<For>`, screen readers don't announce it unless the container has `aria-live`. Without it, users relying on assistive technology miss updates entirely.
+
+**Incorrect (dynamic content with no screen reader announcement):**
+
+```typescript
+function Notifications(props: { items: string[] }) {
+  return (
+    <div>
+      <Show when={props.items.length > 0}>
+        <ul>
+          <For each={props.items}>{(item) => <li>{item}</li>}</For>
+        </ul>
+      </Show>
+    </div>
+  )
+  // Screen reader users never learn new notifications appeared
+}
+```
+
+**Correct (aria-live announces dynamic changes):**
+
+```typescript
+function Notifications(props: { items: string[] }) {
+  return (
+    <div aria-live="polite" role="status">
+      <Show
+        when={props.items.length > 0}
+        fallback={<p>No notifications</p>}
+      >
+        <ul aria-label="Notifications">
+          <For each={props.items}>{(item) => <li>{item}</li>}</For>
+        </ul>
+      </Show>
+    </div>
+  )
+}
+```
+
+**For expandable sections, use aria-expanded on the trigger:**
+
+```typescript
+function ExpandableSection(props: { title: string; children: JSX.Element }) {
+  const [expanded, setExpanded] = createSignal(false)
+
+  return (
+    <div>
+      <button
+        aria-expanded={expanded()}
+        aria-controls="section-content"
+        onClick={() => setExpanded(!expanded())}
+      >
+        {props.title}
+      </button>
+      <Show when={expanded()}>
+        <div id="section-content" role="region" aria-label={props.title}>
+          {props.children}
+        </div>
+      </Show>
+    </div>
+  )
+}
+```
+
+**Guidelines:**
+- `aria-live="polite"` — announces after current speech finishes (most cases)
+- `aria-live="assertive"` — interrupts current speech (errors, urgent alerts only)
+- `role="status"` — implicit `aria-live="polite"` for status messages
+- `role="alert"` — implicit `aria-live="assertive"` for error messages
+- Always provide `aria-label` on `<ul>` / `<ol>` rendered inside `<For>`
+- For complex widgets (dialogs, tabs), use Kobalte instead (see component-accessible-dialog)
+
+Reference: [WAI-ARIA Live Regions](https://www.w3.org/WAI/ARIA/apd/#live_region)
+
+---
+
 ## Use children() Helper to Resolve and Memoize Children
 
 **Impact: MEDIUM (repeated expensive child evaluation, inability to inspect/manipulate children)**
@@ -1110,6 +1590,7 @@ const Tabs = (props) => {
 Reference: [SolidJS children helper](https://docs.solidjs.com/reference/component-apis/children)
 
 ---
+
 ## Use Dynamic for Polymorphic Components
 
 **Impact: MEDIUM (verbose conditional JSX for component-switching, duplicated prop spreading)**
@@ -1183,6 +1664,7 @@ const Icon = (props) => {
 Reference: [SolidJS Dynamic](https://docs.solidjs.com/reference/components/dynamic)
 
 ---
+
 ## Use mergeProps for Default Values
 
 **Impact: HIGH (broken reactivity on defaulted props)**
@@ -1219,6 +1701,7 @@ function Button(props: { size?: "sm" | "md" | "lg" }) {
 Reference: [SolidJS mergeProps docs](https://docs.solidjs.com/reference/component-apis/merge-props)
 
 ---
+
 ## Don't Return Early Before Reactive Primitives
 
 **Impact: HIGH (hooks run inconsistently — effects and signals may not initialize)**
@@ -1262,6 +1745,64 @@ function UserProfile(props) {
 Reference: [SolidJS Components](https://docs.solidjs.com/concepts/components/basics)
 
 ---
+
+## Use onMount for One-Time DOM Setup
+
+**Impact: MEDIUM (ensures DOM is available before measurements or focus)**
+
+`onMount` runs once after the component's DOM is inserted. Use it for initial focus, DOM measurements, third-party library initialization, or any setup that requires real DOM elements. Unlike `createEffect`, it does not track dependencies and never re-runs.
+
+**Incorrect (using createEffect for one-time setup):**
+
+```tsx
+function SearchInput() {
+  let inputRef!: HTMLInputElement;
+
+  createEffect(() => {
+    inputRef.focus(); // Runs on every reactive change, not just mount
+  });
+
+  return <input ref={inputRef} />;
+}
+```
+
+**Correct (onMount for one-time DOM work):**
+
+```tsx
+import { onMount } from "solid-js";
+
+function SearchInput() {
+  let inputRef!: HTMLInputElement;
+
+  onMount(() => {
+    inputRef.focus(); // Runs once after DOM insertion
+  });
+
+  return <input ref={inputRef} />;
+}
+```
+
+**Correct (DOM measurements on mount):**
+
+```tsx
+function ResponsiveChart(props) {
+  let containerRef!: HTMLDivElement;
+
+  onMount(() => {
+    const { width, height } = containerRef.getBoundingClientRect();
+    initChart(containerRef, { width, height, data: props.data });
+  });
+
+  return <div ref={containerRef} class="chart-container" />;
+}
+```
+
+Do not use `onMount` for reactive work — it won't re-run when signals change. For reactive side effects, use `createEffect`.
+
+Reference: [SolidJS Docs - onMount](https://docs.solidjs.com/reference/lifecycle/on-mount)
+
+---
+
 ## Use splitProps for Prop Forwarding
 
 **Impact: HIGH (broken reactivity on extracted props)**
@@ -1316,6 +1857,7 @@ function Button(props: ButtonProps) {
 Reference: [SolidJS splitProps docs](https://docs.solidjs.com/reference/component-apis/split-props)
 
 ---
+
 ## Use Specific Component Type Annotations
 
 **Impact: MEDIUM (unclear children expectations, weaker type checking)**
@@ -1380,7 +1922,10 @@ Reference: [SolidJS Component types](https://docs.solidjs.com/reference/componen
 
 ---
 
-# 4. State Management (HIGH)
+# 4. State Management
+
+**Impact: HIGH** — Choosing the right primitive (signal vs store vs context) determines update granularity. Stores provide per-property reactivity for objects/arrays. Incorrect choices cause either over-updating (signal for collections) or unnecessary complexity (store for primitives).
+
 ## Use Typed Context with Store for Global State
 
 **Impact: MEDIUM (type-safe global state with fine-grained reactivity)**
@@ -1427,6 +1972,98 @@ export const useTheme = () => {
 Reference: [SolidJS Context](https://docs.solidjs.com/concepts/context)
 
 ---
+
+## Use Context with Store for App-Wide State
+
+**Impact: HIGH (prevents prop drilling while maintaining fine-grained reactivity)**
+
+For shared state (auth, theme, app config), combine `createContext` with `createStore`. Expose named actions instead of raw setters to keep state changes predictable and type-safe.
+
+**Incorrect (passing raw setter through context):**
+
+```tsx
+const AppContext = createContext();
+
+function AppProvider(props) {
+  const [state, setState] = createStore({ user: null, theme: "dark" });
+  return (
+    <AppContext.Provider value={{ state, setState }}>
+      {props.children}
+    </AppContext.Provider>
+  );
+  // Consumers can setState("anything", "they want") — no guardrails
+}
+```
+
+**Correct (expose named actions):**
+
+```tsx
+import { createContext, useContext, ParentProps } from "solid-js";
+import { createStore } from "solid-js/store";
+
+interface AppState {
+  user: { name: string; email: string } | null;
+  theme: "dark" | "light";
+}
+
+interface AppContextValue {
+  state: AppState;
+  login: (user: AppState["user"]) => void;
+  logout: () => void;
+  toggleTheme: () => void;
+}
+
+const AppContext = createContext<AppContextValue>();
+
+export function AppProvider(props: ParentProps) {
+  const [state, setState] = createStore<AppState>({
+    user: null,
+    theme: "dark",
+  });
+
+  const value: AppContextValue = {
+    state,
+    login: (user) => setState("user", user),
+    logout: () => setState("user", null),
+    toggleTheme: () =>
+      setState("theme", (t) => (t === "dark" ? "light" : "dark")),
+  };
+
+  return (
+    <AppContext.Provider value={value}>
+      {props.children}
+    </AppContext.Provider>
+  );
+}
+
+export function useApp() {
+  const ctx = useContext(AppContext);
+  if (!ctx) throw new Error("useApp must be used within AppProvider");
+  return ctx;
+}
+```
+
+**Usage:**
+
+```tsx
+function Header() {
+  const { state, toggleTheme } = useApp();
+  return (
+    <header>
+      <span>{state.user?.name}</span>
+      <button onClick={toggleTheme}>Theme: {state.theme}</button>
+    </header>
+  );
+  // Only re-renders the specific text nodes that read state.user.name and state.theme
+}
+```
+
+Stores in context give you per-property reactivity — reading `state.theme` doesn't track `state.user`, so unrelated updates don't touch unrelated DOM.
+
+Reference: [SolidJS Docs - Context](https://docs.solidjs.com/reference/component-apis/create-context)
+
+---
+
 ## Use createStore for Multi-Field Form State
 
 **Impact: MEDIUM (over-rendering on every field change)**
@@ -1484,6 +2121,7 @@ const [form, setForm] = createStore({
 Reference: [SolidJS createStore docs](https://docs.solidjs.com/reference/store-utilities/create-store)
 
 ---
+
 ## Use produce() for Complex Store Mutations
 
 **Impact: HIGH (prevents missed reactivity on multi-field updates)**
@@ -1523,6 +2161,7 @@ setState(produce(draft => {
 - Import from `solid-js/store`, not `solid-js`
 
 ---
+
 ## Use reconcile for Fine-Grained Async Updates
 
 **Impact: MEDIUM-HIGH (entire list re-renders instead of minimal diff on refetch)**
@@ -1567,6 +2206,7 @@ const briefs = createAsync(async () => {
 Reference: [SolidJS reconcile](https://docs.solidjs.com/reference/store-utilities/reconcile)
 
 ---
+
 ## Choose Signal vs Store Based on Update Granularity
 
 **Impact: HIGH (over-updating or unnecessary complexity)**
@@ -1620,6 +2260,7 @@ setForm("name", "Alice")  // Only name field subscribers update
 Reference: [SolidJS Stores](https://docs.solidjs.com/concepts/stores)
 
 ---
+
 ## Use Computed Getters in Stores for Derived Reactive Properties
 
 **Impact: MEDIUM (stale derived values or unnecessary effects to keep store properties in sync)**
@@ -1694,7 +2335,10 @@ Reference: [SolidJS Stores](https://docs.solidjs.com/concepts/stores)
 
 ---
 
-# 5. Rendering & Control Flow (MEDIUM-HIGH)
+# 5. Rendering & Control Flow
+
+**Impact: MEDIUM-HIGH** — SolidJS control flow components (Show, For, Switch, Index, ErrorBoundary) are not syntactic sugar — they're performance-critical. Using JSX conditionals or .map() instead causes full remounts and lost state.
+
 ## Wrap Risky Components in ErrorBoundary
 
 **Impact: HIGH (unhandled errors crash entire component tree)**
@@ -1747,6 +2391,7 @@ function App() {
 Reference: [SolidJS ErrorBoundary docs](https://docs.solidjs.com/reference/components/error-boundary)
 
 ---
+
 ## Choose Between For and Index Based on What Changes
 
 **Impact: MEDIUM (unnecessary re-renders in dynamic lists)**
@@ -1794,6 +2439,7 @@ import { For } from "solid-js"
 Reference: [SolidJS Index docs](https://docs.solidjs.com/reference/components/index-component)
 
 ---
+
 ## Place Suspense Inside Conditionals (LazyShow Pattern)
 
 **Impact: MEDIUM-HIGH (layout flicker when toggling modals/conditional content)**
@@ -1838,6 +2484,7 @@ function LazyShow<T>(props: {
 Reference: [SolidJS Suspense](https://docs.solidjs.com/reference/components/suspense)
 
 ---
+
 ## Use `<For>` Instead of .map() for Lists
 
 **Impact: CRITICAL (100-1000× more DOM operations — full remount on every update)**
@@ -1871,6 +2518,7 @@ const reversedMessages = createMemo(() => [...messages()].reverse())
 Reference: [SolidJS `<For>` Component](https://docs.solidjs.com/reference/components/for)
 
 ---
+
 ## Use `<Show>` Instead of JSX Conditionals
 
 **Impact: HIGH (component state lost, animations restart on condition toggle)**
@@ -1911,6 +2559,7 @@ Use `Switch`/`Match` for multi-branch conditionals:
 Reference: [SolidJS `<Show>` Component](https://docs.solidjs.com/reference/components/show)
 
 ---
+
 ## Use Switch/Match for Multi-Condition Rendering
 
 **Impact: MEDIUM (unreadable nested conditionals, potential remount bugs)**
@@ -1964,7 +2613,119 @@ Reference: [SolidJS Switch/Match docs](https://docs.solidjs.com/reference/compon
 
 ---
 
-# 6. SolidStart Patterns (MEDIUM-HIGH)
+# 6. SolidStart Patterns
+
+**Impact: MEDIUM-HIGH** — SolidStart-specific patterns for routing, server functions, middleware, SSR, and deployment. Includes createAsync + query patterns, "use server" validation, and file-based routing best practices.
+
+## Use action() + useSubmission() for Form Mutations
+
+**Impact: HIGH (no pending states, no optimistic UI, no progressive enhancement)**
+
+SolidStart's `action()` wraps server functions for form mutations, giving you reactive pending/error state via `useSubmission()`, progressive enhancement (forms work without JS), and cache invalidation via `revalidate()`. Raw fetch/POST bypasses all of this.
+
+**Incorrect (manual fetch — no pending state, no progressive enhancement):**
+
+```typescript
+import { createSignal } from "solid-js"
+
+function AddTodoForm() {
+  const [loading, setLoading] = createSignal(false)
+
+  async function handleSubmit(e: SubmitEvent) {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      const formData = new FormData(e.target as HTMLFormElement)
+      await fetch("/api/todos", {
+        method: "POST",
+        body: JSON.stringify({ name: formData.get("name") }),
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input name="name" />
+      <button disabled={loading()}>{loading() ? "Adding..." : "Add"}</button>
+    </form>
+  )
+}
+```
+
+**Correct (action + useSubmission — reactive pending, retry, clear):**
+
+```typescript
+import { Show } from "solid-js"
+import { action, useSubmission } from "@solidjs/router"
+
+const addTodo = action(async (formData: FormData) => {
+  "use server"
+  const name = formData.get("name")?.toString()
+  if (!name || name.length < 2) {
+    return { ok: false, message: "Name must be at least 2 characters." }
+  }
+  await db.insert("todos").values({ name })
+  return { ok: true }
+}, "addTodo")
+
+function AddTodoForm() {
+  const submission = useSubmission(addTodo)
+
+  return (
+    <form action={addTodo} method="post">
+      <input name="name" />
+      <button type="submit">{submission.pending ? "Adding..." : "Add"}</button>
+      <Show when={!submission.result?.ok && submission.result?.message}>
+        <p>{submission.result!.message}</p>
+        <button onClick={() => submission.clear()}>Clear</button>
+        <button onClick={() => submission.retry()}>Retry</button>
+      </Show>
+    </form>
+  )
+}
+```
+
+**Programmatic trigger with useAction():**
+
+```typescript
+import { action, useAction } from "@solidjs/router"
+
+const addPost = action(async (title: string) => {
+  "use server"
+  await db.insert("posts").values({ title })
+}, "addPost")
+
+function Page() {
+  const [title, setTitle] = createSignal("")
+  const submit = useAction(addPost)
+
+  return (
+    <div>
+      <input value={title()} onInput={(e) => setTitle(e.target.value)} />
+      <button onClick={() => submit(title())}>Add Post</button>
+    </div>
+  )
+}
+```
+
+**Cache invalidation after mutation:**
+
+```typescript
+import { action, revalidate, redirect } from "@solidjs/router"
+
+const addPost = action(async (formData: FormData) => {
+  "use server"
+  await db.insert("posts").values({ title: formData.get("title") })
+  revalidate(getPosts) // re-runs the getPosts query cache
+}, "addPost")
+```
+
+Reference: [SolidStart Actions](https://docs.solidjs.com/solid-start/building-your-application/actions)
+
+---
+
 ## Use createAsync + query() for Data Loading in SolidStart
 
 **Impact: HIGH (missing cache dedup, improper invalidation, waterfall fetches)**
@@ -2015,6 +2776,214 @@ function UserPage() {
 Reference: [SolidStart Data Loading](https://docs.solidjs.com/solid-start/building-your-application/data-loading)
 
 ---
+
+## Use deferStream for Header-Modifying Queries
+
+**Impact: MEDIUM ("headers already sent" errors when server functions set cookies or redirect)**
+
+Once SolidStart begins streaming HTML, HTTP headers are locked. If a `createAsync` query modifies headers (sets cookies, triggers redirects), it must resolve *before* streaming starts. Use `deferStream: true` to hold the stream until that query completes.
+
+**Incorrect (streaming starts before auth query resolves):**
+
+```typescript
+export default function ProtectedPage() {
+  // This query sets session cookies and may redirect
+  const user = createAsync(() => getCurrentUser())
+
+  return (
+    <Suspense fallback={<Loading />}>
+      <Dashboard user={user()} />
+    </Suspense>
+  )
+  // ERROR: getCurrentUser() tries to set cookies after streaming began
+}
+```
+
+**Correct (deferStream holds the stream for header-modifying queries):**
+
+```typescript
+export default function ProtectedPage() {
+  // deferStream: true — stream waits for this query before sending headers
+  const user = createAsync(() => getCurrentUser(), { deferStream: true })
+
+  return (
+    <Suspense fallback={<Loading />}>
+      <Dashboard user={user()} />
+    </Suspense>
+  )
+}
+```
+
+**When to use deferStream:**
+- Server functions that call `setCookie()` or `deleteCookie()`
+- Server functions that may `throw redirect()`
+- Auth/session queries that gate the entire page
+
+**When NOT to use deferStream:**
+- Read-only data queries — let them stream normally
+- Queries inside nested Suspense boundaries that don't touch headers
+
+Reference: [SolidStart createAsync](https://docs.solidjs.com/reference/solid-router/data-apis/create-async)
+
+---
+
+## Use createMiddleware() for Centralized Auth and Request Processing
+
+**Impact: HIGH (duplicated auth checks, inconsistent guard logic, missed routes)**
+
+SolidStart middleware runs before route handlers, providing a single place for auth guards, redirects, and request logging. Without it, auth checks get duplicated across every server function.
+
+**Incorrect (duplicated auth checks in every server function):**
+
+```typescript
+const getProfile = query(async () => {
+  "use server"
+  const session = await getSession()
+  if (!session.userId) throw redirect("/login") // repeated everywhere
+  return db.users.get(session.userId)
+}, "profile")
+
+const updateProfile = action(async (formData: FormData) => {
+  "use server"
+  const session = await getSession()
+  if (!session.userId) throw redirect("/login") // same check, duplicated
+  // ...
+})
+```
+
+**Correct (centralized middleware — app.config.ts + src/middleware/index.ts):**
+
+```typescript
+// app.config.ts
+import { defineConfig } from "@solidjs/start/config"
+
+export default defineConfig({
+  middleware: "src/middleware/index.ts",
+})
+```
+
+```typescript
+// src/middleware/index.ts
+import { createMiddleware } from "@solidjs/start/middleware"
+import { redirect } from "@solidjs/router"
+import { getCookie } from "vinxi/http"
+import type { FetchEvent } from "@solidjs/start/server"
+
+const PROTECTED_PATHS = ["/dashboard", "/settings", "/profile"]
+
+function authGuard(event: FetchEvent) {
+  const { pathname } = new URL(event.request.url)
+  if (PROTECTED_PATHS.some((p) => pathname.startsWith(p))) {
+    const session = getCookie(event.nativeEvent, "session")
+    if (!session) return redirect("/login")
+    event.locals.sessionId = session
+  }
+}
+
+function logger(event: FetchEvent) {
+  event.locals.startTime = Date.now()
+}
+
+function logDuration(event: FetchEvent) {
+  const ms = Date.now() - event.locals.startTime
+  console.log(`${event.request.method} ${event.request.url} — ${ms}ms`)
+}
+
+export default createMiddleware({
+  onRequest: [authGuard, logger],
+  onBeforeResponse: [logDuration],
+})
+```
+
+**Accessing middleware data in server functions via getRequestEvent():**
+
+```typescript
+import { getRequestEvent } from "solid-js/web"
+import { query } from "@solidjs/router"
+
+const getProfile = query(async () => {
+  "use server"
+  const event = getRequestEvent()
+  const sessionId = event?.locals?.sessionId // populated by middleware
+  return db.users.getBySession(sessionId)
+}, "profile")
+```
+
+**Key points:**
+- `onRequest` runs before route handlers; `onBeforeResponse` runs after
+- Return `redirect()` or `json()` from `onRequest` to short-circuit
+- `event.locals` passes request-scoped data to server functions
+- Use `event.nativeEvent` for `vinxi/http` cookie utilities
+- Must be a default export from the configured middleware file
+
+Reference: [SolidStart Middleware](https://docs.solidjs.com/solid-start/advanced/middleware)
+
+---
+
+## Use createMiddleware for Cross-Cutting Concerns
+
+**Impact: HIGH (centralizes auth, logging, and headers across all routes)**
+
+SolidStart middleware runs for every request before route handlers execute. Use `createMiddleware` for authentication, logging, CORS headers, and request validation. Configure it in `app.config.ts`.
+
+**Incorrect (duplicating auth checks in every server function):**
+
+```tsx
+// src/api/users.ts
+const getUser = query(async (id: string) => {
+  "use server";
+  const session = await getSession(); // repeated everywhere
+  if (!session) throw redirect("/login");
+  return db.users.find(id);
+}, "user");
+
+// src/api/posts.ts
+const getPosts = query(async () => {
+  "use server";
+  const session = await getSession(); // repeated everywhere
+  if (!session) throw redirect("/login");
+  return db.posts.list();
+}, "posts");
+```
+
+**Correct (middleware handles auth once):**
+
+```tsx
+// src/middleware.ts
+import { createMiddleware } from "@solidjs/start/middleware";
+
+export default createMiddleware({
+  onRequest: [
+    (event) => {
+      const session = getSessionFromCookie(event.request.headers);
+      if (!session && isProtectedRoute(event.request.url)) {
+        return Response.redirect("/login");
+      }
+      // Attach session to event locals for downstream use
+      event.locals.session = session;
+    },
+  ],
+  onBeforeResponse: [
+    (event) => {
+      event.response.headers.set("X-Request-Id", crypto.randomUUID());
+    },
+  ],
+});
+
+// app.config.ts
+import { defineConfig } from "@solidjs/start/config";
+
+export default defineConfig({
+  middleware: "./src/middleware.ts",
+});
+```
+
+Middleware runs in order — place auth before logging if you need user context in logs.
+
+Reference: [SolidStart Docs - createMiddleware](https://docs.solidjs.com/solid-start/reference/server/create-middleware)
+
+---
+
 ## Always Define Route Preload Functions
 
 **Impact: HIGH (data fetches delayed until after navigation completes and component renders)**
@@ -2059,6 +3028,83 @@ function UserPage() {
 Reference: [SolidStart Routing](https://docs.solidjs.com/solid-start/building-your-application/routing)
 
 ---
+
+## Use Nested Suspense Boundaries for Streaming SSR
+
+**Impact: HIGH (entire page blocks until slowest query resolves)**
+
+SolidStart streams HTML by default. Each `<Suspense>` boundary defines an independent streaming chunk — without them, the entire page waits for the slowest data fetch. Nested Suspense boundaries let fast queries render immediately while slow ones show skeletons.
+
+**Incorrect (no Suspense — entire page blocks):**
+
+```typescript
+export default function Dashboard() {
+  const user = createAsync(() => getUser())    // 50ms
+  const stats = createAsync(() => getStats())  // 200ms
+  const feed = createAsync(() => getFeed())    // 800ms
+
+  return (
+    <div>
+      <UserHeader user={user()} />
+      <StatsPanel stats={stats()} />
+      <ActivityFeed items={feed()} />
+    </div>
+  )
+  // Nothing renders until getFeed() resolves at 800ms
+}
+```
+
+**Correct (nested Suspense — each section streams independently):**
+
+```typescript
+import { Suspense, ErrorBoundary } from "solid-js"
+import { query, createAsync } from "@solidjs/router"
+import type { RouteDefinition } from "@solidjs/router"
+
+export const route = {
+  preload: () => { getUser(); getStats(); getFeed() }
+} satisfies RouteDefinition
+
+export default function Dashboard() {
+  const user = createAsync(() => getUser())
+  const stats = createAsync(() => getStats())
+  const feed = createAsync(() => getFeed())
+
+  return (
+    <div>
+      {/* Streams at 50ms */}
+      <ErrorBoundary fallback={<div>Error loading user</div>}>
+        <Suspense fallback={<UserSkeleton />}>
+          <UserHeader user={user()} />
+        </Suspense>
+      </ErrorBoundary>
+
+      <div class="grid grid-cols-2">
+        {/* Streams at 200ms */}
+        <Suspense fallback={<StatsSkeleton />}>
+          <StatsPanel stats={stats()} />
+        </Suspense>
+        {/* Streams at 800ms */}
+        <Suspense fallback={<FeedSkeleton />}>
+          <ActivityFeed items={feed()} />
+        </Suspense>
+      </div>
+    </div>
+  )
+}
+```
+
+**Key points:**
+- Each `<Suspense>` boundary streams independently — fast queries don't wait for slow ones
+- `ErrorBoundary` wraps `Suspense` (not inside it) to catch async failures
+- `route.preload` fires all queries during navigation, before component renders
+- Avoid `<Show when={data()}>` inside `<Suspense>` — it defeats Suspense pre-creation
+- Streaming is the default with `ssr: true` (SolidStart default)
+
+Reference: [SolidStart Data Loading](https://docs.solidjs.com/solid-start/building-your-application/data-loading)
+
+---
+
 ## Always Validate "use server" Function Inputs
 
 **Impact: CRITICAL (security vulnerability — client can send any data across RPC boundary)**
@@ -2110,7 +3156,64 @@ Reference: [SolidStart "use server"](https://docs.solidjs.com/solid-start/refere
 
 ---
 
-# 7. Performance Optimization (MEDIUM)
+# 7. Performance Optimization
+
+**Impact: MEDIUM** — Code splitting, lazy loading, bundle optimization, memoization, and Suspense boundary placement. SolidJS is fast by default, but lazy loading and strategic Suspense boundaries still matter for large apps.
+
+## Analyze and Optimize Bundle Size
+
+**Impact: MEDIUM (reduces initial load time and improves TTI)**
+
+SolidJS apps are small by default (~7KB runtime), but dependencies can bloat bundles quickly. Measure before optimizing, and target these metrics for production apps.
+
+**Target metrics:**
+- Initial bundle: < 200KB gzipped
+- Per-route chunk: < 50KB gzipped
+- Time to Interactive: < 3s on 4G
+- Largest Contentful Paint: < 2.5s
+
+**Analyze your bundle:**
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import { visualizer } from "rollup-plugin-visualizer";
+
+export default defineConfig({
+  plugins: [
+    solidPlugin(),
+    visualizer({ open: true, gzipSize: true }),
+  ],
+});
+```
+
+**Common bloat sources and alternatives:**
+
+```tsx
+// WRONG — imports all of lodash (72KB)
+import { debounce } from "lodash";
+
+// CORRECT — import only what you need (1KB)
+import debounce from "lodash-es/debounce";
+
+// WRONG — moment.js (67KB + locales)
+import moment from "moment";
+
+// CORRECT — dayjs (2KB) or Temporal API
+import dayjs from "dayjs";
+```
+
+**Tree-shaking checklist:**
+- Use `lodash-es` instead of `lodash`
+- Use `date-fns` or `dayjs` instead of `moment`
+- Use `@iconify-json/*` with unplugin-icons instead of bundling icon libraries
+- Set `"sideEffects": false` in package.json for your library code
+- Use dynamic imports for heavy components: `lazy(() => import("./HeavyChart"))`
+
+Reference: [Vite Build Optimization](https://vite.dev/guide/build)
+
+---
+
 ## Use createSelector for Single-Selection in Large Lists
 
 **Impact: MEDIUM (O(1) updates instead of O(n) — only 2 items update on selection change)**
@@ -2153,6 +3256,7 @@ Use for lists with 50+ items where selection performance matters.
 Reference: [SolidJS createSelector](https://docs.solidjs.com/reference/reactive-utilities/create-selector)
 
 ---
+
 ## Lazy Load Heavy Components
 
 **Impact: MEDIUM (30-60% initial bundle reduction for modal-heavy apps)**
@@ -2199,6 +3303,7 @@ Always pair with Suspense and skeleton components for a smooth loading experienc
 Reference: [SolidJS lazy](https://docs.solidjs.com/reference/component-apis/lazy)
 
 ---
+
 ## Use createMemo for Expensive Derived Computations
 
 **Impact: MEDIUM (prevents redundant expensive recomputations)**
@@ -2252,6 +3357,7 @@ const name = createMemo(() => user().name)
 - Don't wrap simple getters or property access — the memo overhead costs more than it saves
 
 ---
+
 ## Use createRenderEffect for Synchronous DOM Measurements
 
 **Impact: MEDIUM (layout flicker from deferred DOM reads)**
@@ -2303,6 +3409,7 @@ function AutoLayout() {
 Reference: [SolidJS createRenderEffect docs](https://docs.solidjs.com/reference/secondary-primitives/create-render-effect)
 
 ---
+
 ## Use lazy() for Route-Level Code Splitting
 
 **Impact: HIGH (reduces initial bundle by 40-70% in multi-route apps)**
@@ -2362,6 +3469,7 @@ function App() {
 - Don't lazy-load the home/landing route — it should be in the main bundle
 
 ---
+
 ## Use Skeleton Components as Suspense Fallbacks
 
 **Impact: MEDIUM (layout shift and visual jank during loading)**
@@ -2412,6 +3520,7 @@ function DashboardSkeleton() {
 Reference: [SolidJS Suspense docs](https://docs.solidjs.com/reference/components/suspense)
 
 ---
+
 ## Use useTransition for Non-Blocking Async Updates
 
 **Impact: MEDIUM (UI freezes during async state transitions)**
@@ -2473,7 +3582,10 @@ Reference: [SolidJS useTransition docs](https://docs.solidjs.com/reference/react
 
 ---
 
-# 8. Testing (LOW-MEDIUM)
+# 8. Testing
+
+**Impact: LOW-MEDIUM** — Testing reactive code requires understanding createRoot, renderHook, and how effects run synchronously in test contexts. Solid Query mocking and async testing have unique patterns.
+
 ## Use waitFor for Async Component Assertions
 
 **Impact: LOW (flaky tests from timing-dependent assertions)**
@@ -2519,6 +3631,7 @@ it("shows user data", async () => {
 Reference: [Solid Testing Library docs](https://github.com/solidjs/solid-testing-library)
 
 ---
+
 ## Wrap Reactive Test Code in createRoot
 
 **Impact: LOW-MEDIUM (leaked reactive contexts, orphaned effects in tests)**
@@ -2563,6 +3676,7 @@ it("increments counter", () => {
 Reference: [Solid Testing Library](https://github.com/solidjs/solid-testing-library)
 
 ---
+
 ## Use vi.hoisted for Mock Definitions
 
 **Impact: LOW (mock reference errors or stale mock state)**
@@ -2617,6 +3731,7 @@ beforeEach(() => {
 Reference: [Vitest vi.hoisted docs](https://vitest.dev/api/vi.html#vi-hoisted)
 
 ---
+
 ## Use render() and Testing Library for Component Tests
 
 **Impact: MEDIUM (correct component testing prevents false positives)**
@@ -2659,6 +3774,68 @@ describe("Counter", () => {
 - Use `vi.hoisted()` with `vi.mock()` for proper mock hoisting in vitest
 
 ---
+
+## Wrap Components in Functions When Testing
+
+**Impact: HIGH (tests fail or behave incorrectly without the function wrapper)**
+
+SolidJS testing library's `render` expects a function returning JSX, not the JSX directly. This differs from React Testing Library. Without the wrapper, the component executes outside a reactive root and reactive updates won't work.
+
+**Incorrect (React Testing Library pattern):**
+
+```tsx
+import { render, screen } from "@solidjs/testing-library";
+
+it("renders greeting", () => {
+  render(<Greeting name="World" />); // Wrong — passes JSX directly
+  expect(screen.getByText("Hello, World!")).toBeInTheDocument();
+});
+```
+
+**Correct (function wrapper):**
+
+```tsx
+import { render, screen } from "@solidjs/testing-library";
+
+it("renders greeting", () => {
+  render(() => <Greeting name="World" />); // Correct — arrow function
+  expect(screen.getByText("Hello, World!")).toBeInTheDocument();
+});
+```
+
+**Correct (testing reactive updates):**
+
+```tsx
+it("updates on click", async () => {
+  const user = userEvent.setup();
+  render(() => <Counter initial={0} />);
+
+  const button = screen.getByRole("button");
+  expect(button).toHaveTextContent("0");
+
+  await user.click(button);
+  expect(button).toHaveTextContent("1");
+  // No rerender needed — signals drive updates automatically
+});
+```
+
+There is no `rerender` in Solid's testing library. To test prop changes, use signals:
+
+```tsx
+it("reacts to prop changes", () => {
+  const [name, setName] = createSignal("World");
+  render(() => <Greeting name={name()} />);
+
+  expect(screen.getByText("Hello, World!")).toBeInTheDocument();
+  setName("Solid");
+  expect(screen.getByText("Hello, Solid!")).toBeInTheDocument();
+});
+```
+
+Reference: [SolidJS Docs - Testing](https://docs.solidjs.com/guides/testing)
+
+---
+
 ## Use renderHook for Testing Custom Hooks
 
 **Impact: LOW (boilerplate-heavy tests or missing reactive context)**
@@ -2705,7 +3882,10 @@ Reference: [Solid Testing Library docs](https://github.com/solidjs/solid-testing
 
 ---
 
-# 9. External Interop (LOW)
+# 9. External Interop
+
+**Impact: LOW** — Bridging SolidJS reactivity with external APIs (browser observers, RxJS, WebSockets) via `from` and `observable`. Advanced patterns for when you need to consume or expose signals to non-Solid code.
+
 ## Use from() to Bridge Browser APIs into Reactive Signals
 
 **Impact: LOW (clean reactive integration with matchMedia, ResizeObserver, WebSocket)**
@@ -2750,6 +3930,7 @@ const isWidescreen = useMediaQuery("(min-width: 1280px)")
 Reference: [SolidJS from()](https://docs.solidjs.com/reference/reactive-utilities/from)
 
 ---
+
 ## Use observable to Export Signals to External Libraries
 
 **Impact: LOW (manual subscription glue code)**
@@ -2802,4 +3983,4 @@ search$.pipe(
 
 Reference: [SolidJS observable docs](https://docs.solidjs.com/reference/secondary-primitives/observable)
 
-<!-- Generated from rules/ directory. Do not edit directly. -->
+---

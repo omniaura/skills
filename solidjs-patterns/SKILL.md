@@ -9,7 +9,7 @@ metadata:
 
 # SolidJS Patterns and Best Practices
 
-Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 49 rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
+Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 74 rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
 
 ## When to Apply
 
@@ -68,6 +68,8 @@ Reference these guidelines when:
 - `component-no-early-return` - Don't return early before reactive primitives
 - `component-merge-props` - Use mergeProps for reactive default values
 - `component-split-props` - Use splitProps to separate and forward props
+- `component-accessible-dialog` - Use Kobalte for accessible interactive widgets
+- `component-aria-live-dynamic` - Use ARIA live regions for dynamic content updates
 
 ### 4. State Management (HIGH)
 
@@ -91,6 +93,10 @@ Reference these guidelines when:
 - `start-use-server-validation` - Always validate "use server" function inputs
 - `start-createasync-not-resource` - Use createAsync + query() for data loading
 - `start-route-preloading` - Always define route preload functions
+- `start-action-mutations` - Use action() + useSubmission() for form mutations
+- `start-middleware-auth` - Use createMiddleware() for centralized auth and request processing
+- `start-streaming-suspense` - Use nested Suspense boundaries for streaming SSR
+- `start-defer-stream` - Use deferStream for header-modifying queries
 
 ### 7. Performance Optimization (MEDIUM)
 
