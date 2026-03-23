@@ -1,12 +1,105 @@
 # SolidJS Patterns — Complete Rule Reference
 
-> **74 rules** across 9 sections, ordered by impact.
+> **82 rules** across 9 sections, ordered by impact.
 
 ---
 
 # 1. Reactivity Correctness
 
 **Impact: CRITICAL** — SolidJS's fine-grained reactivity is its core advantage but also the #1 source of bugs. Signals must be read inside reactive contexts, stores must not be destructured, and tracking scopes must be understood. Getting reactivity wrong silently breaks your UI.
+
+## Never Use async/await Inside createEffect
+
+**Impact: HIGH (signal reads after await silently lose tracking — effects never re-run)**
+
+After the first `await` inside `createEffect`, the synchronous tracking context is destroyed. Any signal reads after `await` will NOT register as dependencies — the effect will never re-run when those signals change. This is one of the most common silent bugs in SolidJS.
+
+**Incorrect (tracking lost after await):**
+
+```tsx
+createEffect(async () => {
+  const id = userId();        // ✅ tracked (before await)
+  const data = await fetchUser(id);
+  const format = outputFormat(); // ❌ NOT tracked (after await)
+  setDisplay(formatUser(data, format));
+});
+// Effect re-runs when userId changes, but NOT when outputFormat changes
+```
+
+**Correct (separate the async work from the tracking):**
+
+```tsx
+// Option 1: Track all signals before the await
+createEffect(() => {
+  const id = userId();
+  const format = outputFormat(); // ✅ tracked (before await)
+  fetchUser(id).then(data => {
+    setDisplay(formatUser(data, format));
+  });
+});
+
+// Option 2: Use createResource / createAsync for async data
+const user = createAsync(() => fetchUser(userId()));
+// Then derive from user() and outputFormat() in a memo or JSX
+```
+
+**Why this happens:** SolidJS tracks signal reads synchronously during function execution. `await` suspends execution and resumes in a microtask where the tracking scope no longer exists. This is fundamental to how JavaScript async works — not a SolidJS bug.
+
+**Rule of thumb:** If you need `await` in an effect, restructure so ALL signal reads happen before the first `await`, or use `createResource`/`createAsync` instead.
+
+Reference: [SolidJS Docs - createEffect](https://docs.solidjs.com/reference/basic-reactivity/create-effect)
+
+---
+
+## batch() Only Batches Synchronous Updates
+
+**Impact: MEDIUM (updates after await bypass batching — unexpected intermediate renders)**
+
+`batch()` defers subscriber notifications until the callback completes, but only for synchronous code. If the callback is async, updates after the first `await` are applied immediately and individually — defeating the purpose of batching.
+
+**Incorrect (async batch — updates after await are NOT batched):**
+
+```tsx
+batch(async () => {
+  setName("Alice");       // ✅ batched
+  setAge(30);             // ✅ batched
+  const data = await fetchProfile();
+  setEmail(data.email);   // ❌ applied immediately (not batched)
+  setAvatar(data.avatar); // ❌ applied immediately (separate update)
+});
+```
+
+**Correct (batch only synchronous updates):**
+
+```tsx
+// Option 1: Fetch first, batch the sync updates
+const data = await fetchProfile();
+batch(() => {
+  setName(data.name);
+  setAge(data.age);
+  setEmail(data.email);
+  setAvatar(data.avatar);
+});
+
+// Option 2: Use a store with reconcile (single update)
+const [profile, setProfile] = createStore(initialProfile);
+const data = await fetchProfile();
+setProfile(reconcile(data));
+```
+
+**Also note:** Reading a signal inside `batch()` after setting it returns the OLD value (pre-batch), since updates are deferred:
+
+```tsx
+batch(() => {
+  setCount(5);
+  console.log(count()); // Still the old value, not 5
+});
+// After batch completes, count() returns 5
+```
+
+Reference: [SolidJS Docs - batch](https://docs.solidjs.com/reference/reactive-utilities/batch)
+
+---
 
 ## Batch Multiple Signal Updates to Prevent Intermediate Renders
 
@@ -1591,6 +1684,76 @@ Reference: [SolidJS children helper](https://docs.solidjs.com/reference/componen
 
 ---
 
+## Bind Both value and onInput for Controlled Inputs
+
+**Impact: HIGH (inputs appear controlled but user can type freely — state and UI diverge)**
+
+Unlike React, setting `value={signal()}` on an input does NOT make it controlled in SolidJS. Since SolidJS doesn't re-render the component, the DOM input keeps its own state. For true controlled behavior, you MUST bind both `value` and an input handler.
+
+**Incorrect (value alone — NOT controlled):**
+
+```tsx
+function SearchBox() {
+  const [query, setQuery] = createSignal("");
+  // ❌ User can type anything — the input ignores the signal
+  return <input value={query()} />;
+}
+```
+
+**Correct (value + onInput — truly controlled):**
+
+```tsx
+function SearchBox() {
+  const [query, setQuery] = createSignal("");
+  return (
+    <input
+      value={query()}
+      onInput={(e) => setQuery(e.currentTarget.value)}
+    />
+  );
+}
+
+// With validation/transformation:
+function PhoneInput() {
+  const [phone, setPhone] = createSignal("");
+  return (
+    <input
+      value={phone()}
+      onInput={(e) => {
+        // Strip non-digits — input reflects only valid characters
+        setPhone(e.currentTarget.value.replace(/\D/g, ""));
+      }}
+    />
+  );
+}
+```
+
+**Checkboxes and selects follow the same pattern:**
+
+```tsx
+// Checkbox
+<input
+  type="checkbox"
+  checked={isEnabled()}
+  onChange={(e) => setIsEnabled(e.currentTarget.checked)}
+/>
+
+// Select
+<select
+  value={selected()}
+  onChange={(e) => setSelected(e.currentTarget.value)}
+>
+  <option value="a">A</option>
+  <option value="b">B</option>
+</select>
+```
+
+**Note:** File inputs (`<input type="file">`) cannot be controlled — their `value` is read-only for security reasons. Use `onChange` to capture the selected file.
+
+Reference: [SolidJS Docs - Control Flow](https://docs.solidjs.com/concepts/control-flow)
+
+---
+
 ## Use Dynamic for Polymorphic Components
 
 **Impact: MEDIUM (verbose conditional JSX for component-switching, duplicated prop spreading)**
@@ -2339,6 +2502,70 @@ Reference: [SolidJS Stores](https://docs.solidjs.com/concepts/stores)
 
 **Impact: MEDIUM-HIGH** — SolidJS control flow components (Show, For, Switch, Index, ErrorBoundary) are not syntactic sugar — they're performance-critical. Using JSX conditionals or .map() instead causes full remounts and lost state.
 
+## ErrorBoundary Only Catches Rendering and Reactive Errors
+
+**Impact: MEDIUM (event handler errors silently escape — users see no fallback UI)**
+
+`<ErrorBoundary>` catches errors thrown during rendering and inside reactive computations (effects, memos). It does NOT catch errors from event handlers, `setTimeout`, `requestAnimationFrame`, or promise rejections — those bypass the boundary entirely.
+
+**Incorrect (assuming ErrorBoundary catches everything):**
+
+```tsx
+<ErrorBoundary fallback={(err) => <p>Error: {err.message}</p>}>
+  <button onClick={() => {
+    // ❌ This error escapes the boundary — no fallback shown
+    throw new Error("Button handler failed");
+  }}>
+    Click me
+  </button>
+</ErrorBoundary>
+```
+
+**Correct (manually catch event handler errors):**
+
+```tsx
+function SafeButton() {
+  const [error, setError] = createSignal<Error | null>(null);
+
+  return (
+    <Show when={!error()} fallback={<p>Error: {error()!.message}</p>}>
+      <button onClick={() => {
+        try {
+          riskyOperation();
+        } catch (err) {
+          setError(err as Error);
+        }
+      }}>
+        Click me
+      </button>
+    </Show>
+  );
+}
+```
+
+**What ErrorBoundary DOES catch:**
+
+```tsx
+<ErrorBoundary fallback={(err) => <p>{err.message}</p>}>
+  {/* ✅ Rendering errors */}
+  <ComponentThatThrowsDuringRender />
+
+  {/* ✅ Errors in effects/memos */}
+  <ComponentWithFailingEffect />
+
+  {/* ✅ Errors from createResource/createAsync (network failures) */}
+  <Suspense fallback={<Loading />}>
+    <AsyncComponent />
+  </Suspense>
+</ErrorBoundary>
+```
+
+**Tip:** For comprehensive error handling, combine `<ErrorBoundary>` for rendering errors with try/catch in event handlers and `.catch()` on promises.
+
+Reference: [SolidJS Docs - ErrorBoundary](https://docs.solidjs.com/reference/components/error-boundary)
+
+---
+
 ## Wrap Risky Components in ErrorBoundary
 
 **Impact: HIGH (unhandled errors crash entire component tree)**
@@ -2920,6 +3147,94 @@ Reference: [SolidStart Middleware](https://docs.solidjs.com/solid-start/advanced
 
 ---
 
+## Use createMiddleware with event.locals for Shared State
+
+**Impact: HIGH (avoids global state leaks between requests and duplicated auth checks)**
+
+SolidStart middleware runs before route handlers and server functions. Use `createMiddleware` with `event.locals` to share data (auth session, feature flags, request metadata) between middleware and downstream code — never use module-level globals which leak between requests.
+
+**Incorrect (global state — leaks between concurrent requests):**
+
+```typescript
+// ❌ Module-level state shared across ALL requests
+let currentUser: User | null = null;
+
+export default defineConfig({
+  middleware: async (event) => {
+    currentUser = await verifySession(event.request);
+  },
+});
+
+// In a server function
+async function getData() {
+  "use server";
+  // ❌ currentUser could be from a different request
+  if (!currentUser) throw new Error("Unauthorized");
+}
+```
+
+**Correct (event.locals — scoped to the request):**
+
+```typescript
+// middleware.ts
+import { createMiddleware } from "@solidjs/start/middleware";
+
+export default createMiddleware({
+  onRequest: [
+    async (event) => {
+      const session = await verifySession(event.request);
+      event.locals.user = session?.user ?? null;
+      event.locals.requestId = crypto.randomUUID();
+
+      // Return a Response for early termination (e.g., auth guard)
+      if (!session && isProtectedRoute(event.request.url)) {
+        return new Response(null, {
+          status: 302,
+          headers: { Location: "/login" },
+        });
+      }
+    },
+  ],
+  onBeforeResponse: [
+    async (event) => {
+      // Add headers, log timing, etc.
+      event.response.headers.set("X-Request-Id", event.locals.requestId);
+    },
+  ],
+});
+```
+
+```typescript
+// app.config.ts — register middleware
+import { defineConfig } from "@solidjs/start/config";
+
+export default defineConfig({
+  middleware: "./src/middleware.ts",
+});
+```
+
+```typescript
+// In server functions — access event.locals
+import { getRequestEvent } from "solid-js/web";
+
+async function getData() {
+  "use server";
+  const event = getRequestEvent()!;
+  if (!event.locals.user) throw new Error("Unauthorized");
+  return db.getData(event.locals.user.id);
+}
+```
+
+**Key points:**
+- `event.locals` is typed and scoped to a single request lifecycle
+- Return a `Response` from `onRequest` for early termination (redirects, 401s)
+- Register middleware in `app.config.ts`, not in route files
+- Access locals in server functions via `getRequestEvent()`
+
+Reference: [SolidStart Middleware](https://docs.solidjs.com/solid-start/advanced/middleware)
+
+---
+
 ## Use createMiddleware for Cross-Cutting Concerns
 
 **Impact: HIGH (centralizes auth, logging, and headers across all routes)**
@@ -3026,6 +3341,67 @@ function UserPage() {
 ```
 
 Reference: [SolidStart Routing](https://docs.solidjs.com/solid-start/building-your-application/routing)
+
+---
+
+## Validate All Inputs Inside "use server" Functions
+
+**Impact: HIGH (server functions are public HTTP endpoints — unvalidated input leads to injection/data leaks)**
+
+Every `"use server"` function compiles to a public HTTP POST endpoint. TypeScript types are erased at runtime — an attacker can send any payload. Always validate inputs with a runtime schema (Zod), check auth inside each function, and never return raw internal errors.
+
+**Incorrect (trusting TypeScript types at runtime):**
+
+```typescript
+async function updateProfile(userId: string, data: ProfileData) {
+  "use server";
+  // ❌ No input validation — attacker can send { role: "admin" }
+  // ❌ No auth check — anyone can update any profile
+  await db.users.update({ where: { id: userId }, data });
+}
+```
+
+**Correct (validate inputs + check auth):**
+
+```typescript
+import { z } from "zod";
+import { getSession } from "./auth";
+
+const ProfileSchema = z.object({
+  displayName: z.string().min(1).max(100),
+  bio: z.string().max(500).optional(),
+});
+
+async function updateProfile(userId: string, rawData: unknown) {
+  "use server";
+
+  // 1. Auth check
+  const session = await getSession();
+  if (!session || session.userId !== userId) {
+    throw new Error("Unauthorized");
+  }
+
+  // 2. Runtime validation
+  const result = ProfileSchema.safeParse(rawData);
+  if (!result.success) {
+    throw new Error("Invalid input");
+  }
+
+  // 3. Use validated data only
+  await db.users.update({
+    where: { id: userId },
+    data: result.data,
+  });
+}
+```
+
+**Security checklist for server functions:**
+- Validate all inputs with Zod `safeParse` (not just `parse` — catch errors gracefully)
+- Check authentication AND authorization inside each function
+- Never return raw database errors or stack traces
+- Treat `"use server"` as a trust boundary — same rigor as a REST endpoint
+
+Reference: [SolidStart - "use server"](https://docs.solidjs.com/solid-start/reference/server/use-server)
 
 ---
 
@@ -3931,6 +4307,73 @@ Reference: [SolidJS from()](https://docs.solidjs.com/reference/reactive-utilitie
 
 ---
 
+## Use Kobalte for Accessible Interactive Components
+
+**Impact: MEDIUM (hand-rolled dialogs/menus miss ARIA patterns — fails accessibility audits)**
+
+Kobalte provides headless, WAI-ARIA compliant components for SolidJS. Use it for dialogs, menus, selects, popovers, tooltips, and tabs instead of building from scratch. Style states via `data-*` attribute selectors — Kobalte exposes `data-expanded`, `data-checked`, `data-highlighted`, etc.
+
+**Incorrect (hand-rolled dialog — missing ARIA):**
+
+```tsx
+function Dialog(props: { open: boolean; children: JSX.Element }) {
+  return (
+    <Show when={props.open}>
+      {/* ❌ No role, no aria-modal, no focus trapping, no ESC to close */}
+      <div class="overlay">
+        <div class="dialog">{props.children}</div>
+      </div>
+    </Show>
+  );
+}
+```
+
+**Correct (Kobalte Dialog — full ARIA compliance):**
+
+```tsx
+import { Dialog } from "@kobalte/core/dialog";
+
+function MyDialog() {
+  return (
+    <Dialog>
+      <Dialog.Trigger>Open</Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay class="fixed inset-0 bg-black/50" />
+        <Dialog.Content class="fixed inset-0 m-auto max-w-md rounded-lg bg-white p-6">
+          <Dialog.Title>Settings</Dialog.Title>
+          <Dialog.Description>Update your preferences.</Dialog.Description>
+          {/* Focus trapped, ESC closes, aria-modal set automatically */}
+          <Dialog.CloseButton>Close</Dialog.CloseButton>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog>
+  );
+}
+```
+
+**Styling component states with Tailwind:**
+
+```tsx
+// Install: @kobalte/tailwindcss for ui-* modifiers
+<Accordion.Trigger class="ui-expanded:bg-blue-100 ui-expanded:font-bold">
+  Section Title
+</Accordion.Trigger>
+
+// Or use data attributes directly
+<Select.Item class="data-[highlighted]:bg-blue-100 data-[checked]:font-semibold">
+  {item.label}
+</Select.Item>
+```
+
+**When to use Kobalte vs custom components:**
+- Dialogs, menus, selects, comboboxes, tabs → always Kobalte (complex ARIA)
+- Buttons, links, simple inputs → native HTML elements suffice
+- Toast notifications → Kobalte Toast (manages live region announcements)
+
+Reference: [Kobalte Documentation](https://kobalte.dev/docs/core/overview/introduction/)
+
+---
+
 ## Use observable to Export Signals to External Libraries
 
 **Impact: LOW (manual subscription glue code)**
@@ -3982,5 +4425,67 @@ search$.pipe(
 - Only use `observable` when you genuinely need RxJS operators or external library integration; for Solid-to-Solid communication, use signals directly
 
 Reference: [SolidJS observable docs](https://docs.solidjs.com/reference/secondary-primitives/observable)
+
+---
+
+## Check @solid-primitives Before Building Custom Hooks
+
+**Impact: MEDIUM (reinventing well-tested utilities — wasted effort and edge case bugs)**
+
+The `@solid-primitives` collection has 60+ individually tree-shakeable packages for common patterns. Before writing a custom reactive wrapper for browser APIs, check if a battle-tested primitive already exists.
+
+**Incorrect (hand-rolled media query hook):**
+
+```tsx
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = createSignal(false);
+
+  onMount(() => {
+    const mql = window.matchMedia(query);
+    setMatches(mql.matches);
+    // ❌ Missing cleanup, SSR handling, edge cases
+    mql.addEventListener("change", (e) => setMatches(e.matches));
+  });
+
+  return matches;
+}
+```
+
+**Correct (use the tested primitive):**
+
+```tsx
+import { createMediaQuery } from "@solid-primitives/media";
+
+// ✅ Handles cleanup, SSR, and edge cases
+const isDesktop = createMediaQuery("(min-width: 1024px)");
+
+// In JSX:
+<Show when={isDesktop()} fallback={<MobileNav />}>
+  <DesktopNav />
+</Show>
+```
+
+**Key packages to know:**
+
+| Package | Use Case |
+|---------|----------|
+| `@solid-primitives/storage` | localStorage/sessionStorage with signals |
+| `@solid-primitives/media` | Media queries, prefers-color-scheme |
+| `@solid-primitives/scheduled` | Debounce, throttle, leading/trailing |
+| `@solid-primitives/resize-observer` | Element resize tracking |
+| `@solid-primitives/intersection-observer` | Viewport visibility |
+| `@solid-primitives/event-listener` | Auto-cleaned event listeners |
+| `@solid-primitives/clipboard` | Clipboard read/write |
+| `@solid-primitives/timer` | Reactive setTimeout/setInterval |
+| `@solid-primitives/keyboard` | Key combos, hotkeys |
+| `@solid-primitives/geolocation` | Reactive GPS position |
+
+**Install only what you need:**
+
+```bash
+bun add @solid-primitives/media @solid-primitives/scheduled
+```
+
+Reference: [Solid Primitives](https://github.com/solidjs-community/solid-primitives)
 
 ---

@@ -9,7 +9,7 @@ metadata:
 
 # SolidJS Patterns and Best Practices
 
-Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 74 rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
+Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 82 rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
 
 ## When to Apply
 
@@ -53,6 +53,8 @@ Reference these guidelines when:
 - `reactivity-create-deferred` - Use createDeferred for expensive computations on rapid input
 - `reactivity-create-reaction` - Use createReaction to separate tracking from side effects
 - `reactivity-no-signal-capture` - Don't capture signals in closures outside reactive context
+- `reactivity-async-effect-tracking` - Never use async/await inside createEffect — tracking lost after await
+- `reactivity-batch-async-caveat` - batch() only batches synchronous updates
 
 ### 2. Data Fetching & Server (CRITICAL)
 
@@ -70,6 +72,7 @@ Reference these guidelines when:
 - `component-split-props` - Use splitProps to separate and forward props
 - `component-accessible-dialog` - Use Kobalte for accessible interactive widgets
 - `component-aria-live-dynamic` - Use ARIA live regions for dynamic content updates
+- `component-controlled-inputs` - Bind both value and onInput for controlled inputs
 
 ### 4. State Management (HIGH)
 
@@ -86,6 +89,7 @@ Reference these guidelines when:
 - `rendering-suspense-inside-show` - Place Suspense inside conditionals (LazyShow pattern)
 - `rendering-use-switch-match` - Use Switch/Match for multi-branch conditionals
 - `rendering-error-boundary` - Wrap risky components in ErrorBoundary
+- `rendering-error-boundary-scope` - ErrorBoundary only catches rendering errors, not event handlers
 - `rendering-index-vs-for` - Choose between For and Index based on what changes
 
 ### 6. SolidStart Patterns (MEDIUM-HIGH)
@@ -97,6 +101,8 @@ Reference these guidelines when:
 - `start-middleware-auth` - Use createMiddleware() for centralized auth and request processing
 - `start-streaming-suspense` - Use nested Suspense boundaries for streaming SSR
 - `start-defer-stream` - Use deferStream for header-modifying queries
+- `start-server-function-security` - Validate all inputs in "use server" functions (they're public endpoints)
+- `start-middleware-locals` - Use createMiddleware with event.locals for request-scoped state
 
 ### 7. Performance Optimization (MEDIUM)
 
@@ -120,6 +126,8 @@ Reference these guidelines when:
 
 - `interop-from-browser-apis` - Use from() to bridge browser APIs into reactive signals
 - `interop-observable-export` - Use observable() to expose signals to external libraries
+- `interop-kobalte-accessible-components` - Use Kobalte for accessible dialogs, menus, selects
+- `interop-solid-primitives` - Check @solid-primitives before building custom hooks
 
 ## How to Use
 
