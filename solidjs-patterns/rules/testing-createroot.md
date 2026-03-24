@@ -11,7 +11,26 @@ tags: testing, createRoot, vitest, reactive, cleanup
 
 Testing reactive primitives (signals, stores, effects) requires a reactive owner context. Use `createRoot` to provide one, and always call `dispose` for cleanup.
 
-**Correct pattern:**
+**Incorrect (reactive primitives without createRoot):**
+
+```typescript
+import { createSignal, createEffect } from "solid-js"
+
+it("tracks signal changes", () => {
+  // ❌ No reactive owner — createEffect has no context to register with
+  const [count, setCount] = createSignal(0)
+  const values: number[] = []
+
+  createEffect(() => {
+    values.push(count()) // May warn: "computations created outside a createRoot"
+  })
+
+  setCount(1)
+  expect(values).toEqual([0, 1]) // Unreliable — effect may not track
+})
+```
+
+**Correct (wrapped in createRoot with dispose):**
 
 ```typescript
 import { createRoot } from "solid-js"

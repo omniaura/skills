@@ -11,37 +11,46 @@ tags: state, signal, store, collections, granularity
 
 Signals replace the entire value on update — all subscribers re-run. Stores provide per-property reactivity. Match the primitive to your update pattern.
 
-**Use `createSignal` when:**
+**Incorrect (signal for a collection with per-item updates):**
 
 ```typescript
-// Primitive values
-const [isOpen, setIsOpen] = createSignal(false)
+import { createSignal } from "solid-js"
 
-// Objects replaced entirely
-const [position, setPosition] = createSignal({ x: 0, y: 0 })
-setPosition({ x: 10, y: 20 })  // Full replacement
+// ❌ Every item update replaces the whole array — all list items rerender
+const [todos, setTodos] = createSignal<Todo[]>([])
 
-// Simple derived values
-const [count, setCount] = createSignal(0)
+const toggleDone = (index: number) => {
+  setTodos(prev => prev.map((t, i) =>
+    i === index ? { ...t, done: !t.done } : t
+  ))
+  // Creates a new array → every <For> item callback re-evaluates
+}
 ```
 
-**Use `createStore` when:**
+**Correct (store for per-item updates, signal for simple values):**
 
 ```typescript
-// Per-item updates in collections
-const [expanded, setExpanded] = createStore<boolean[]>([])
-setExpanded(2, true)  // Only subscribers of index 2 update
+import { createSignal } from "solid-js"
+import { createStore } from "solid-js/store"
 
-// Complex nested state with partial updates
+// ✅ Signal for primitives and fully-replaced objects
+const [isOpen, setIsOpen] = createSignal(false)
+const [position, setPosition] = createSignal({ x: 0, y: 0 })
+
+// ✅ Store for collections with per-item updates
+const [todos, setTodos] = createStore<Todo[]>([])
+
+const toggleDone = (index: number) => {
+  setTodos(index, "done", prev => !prev)
+  // Only the component reading todos[index].done rerenders
+}
+
+// ✅ Store for complex nested state with partial updates
 const [state, setState] = createStore({
   users: [],
   settings: { theme: "dark", lang: "en" }
 })
 setState("settings", "theme", "light")  // Only theme subscribers update
-
-// Form state with many fields
-const [form, setForm] = createStore({ name: "", email: "", message: "" })
-setForm("name", "Alice")  // Only name field subscribers update
 ```
 
 **Quick reference:**

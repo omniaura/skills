@@ -9,7 +9,7 @@ metadata:
 
 # SolidJS Patterns and Best Practices
 
-Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 82 rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
+Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 90 rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
 
 ## When to Apply
 
@@ -55,6 +55,7 @@ Reference these guidelines when:
 - `reactivity-no-signal-capture` - Don't capture signals in closures outside reactive context
 - `reactivity-async-effect-tracking` - Never use async/await inside createEffect — tracking lost after await
 - `reactivity-batch-async-caveat` - batch() only batches synchronous updates
+- `reactivity-create-computed` - Use createComputed for synchronous pre-render derived state
 
 ### 2. Data Fetching & Server (CRITICAL)
 
@@ -81,6 +82,8 @@ Reference these guidelines when:
 - `state-reconcile-async` - Use reconcile for fine-grained async updates
 - `state-produce-complex-mutations` - Use produce() for complex store mutations
 - `state-form-store` - Use createStore for multi-field form state
+- `state-expandable-list-store` - Use boolean array store for expandable/collapsible lists
+- `state-selection-pattern` - Choose signal vs store for selection state based on cardinality
 
 ### 5. Rendering & Control Flow (MEDIUM-HIGH)
 
@@ -91,6 +94,8 @@ Reference these guidelines when:
 - `rendering-error-boundary` - Wrap risky components in ErrorBoundary
 - `rendering-error-boundary-scope` - ErrorBoundary only catches rendering errors, not event handlers
 - `rendering-index-vs-for` - Choose between For and Index based on what changes
+- `rendering-map-array-vs-index-array` - Choose mapArray vs indexArray based on what changes
+- `rendering-stable-keys-for` - Use stable unique IDs instead of array indices for list keys
 
 ### 6. SolidStart Patterns (MEDIUM-HIGH)
 
@@ -121,6 +126,9 @@ Reference these guidelines when:
 - `testing-render-hook` - Use renderHook for testing custom hooks
 - `testing-async-waitfor` - Use waitFor for async component testing
 - `testing-mock-hoisted` - Use vi.hoisted with vi.mock for proper mock hoisting
+- `testing-effects-signal-tracking` - Test effects by tracking signal changes in createRoot
+- `testing-file-organization` - Co-locate test files alongside source files
+- `testing-documentation-pattern` - Write documentation tests as living pattern references
 
 ### 9. External Interop (LOW)
 

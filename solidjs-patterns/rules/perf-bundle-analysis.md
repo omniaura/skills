@@ -17,35 +17,42 @@ SolidJS apps are small by default (~7KB runtime), but dependencies can bloat bun
 - Time to Interactive: < 3s on 4G
 - Largest Contentful Paint: < 2.5s
 
-**Analyze your bundle:**
+**Incorrect (heavy imports without analysis or tree-shaking):**
 
-```ts
-// vite.config.ts
-import { defineConfig } from "vite";
-import { visualizer } from "rollup-plugin-visualizer";
+```tsx
+// ❌ Named import from lodash pulls entire library (72KB)
+import { debounce } from "lodash"
+
+// ❌ moment.js bundles all locales (67KB+)
+import moment from "moment"
+
+// ❌ No bundle analysis configured — bloat goes unnoticed
+import { defineConfig } from "vite"
+export default defineConfig({
+  plugins: [solidPlugin()],
+})
+```
+
+**Correct (tree-shakeable imports + bundle analysis):**
+
+```tsx
+// ✅ Direct module import (1KB)
+import debounce from "lodash-es/debounce"
+
+// ✅ Lightweight alternative (2KB) or Temporal API
+import dayjs from "dayjs"
+
+// ✅ Bundle visualizer configured
+import { defineConfig } from "vite"
+import solidPlugin from "vite-plugin-solid"
+import { visualizer } from "rollup-plugin-visualizer"
 
 export default defineConfig({
   plugins: [
     solidPlugin(),
     visualizer({ open: true, gzipSize: true }),
   ],
-});
-```
-
-**Common bloat sources and alternatives:**
-
-```tsx
-// WRONG — imports all of lodash (72KB)
-import { debounce } from "lodash";
-
-// CORRECT — import only what you need (1KB)
-import debounce from "lodash-es/debounce";
-
-// WRONG — moment.js (67KB + locales)
-import moment from "moment";
-
-// CORRECT — dayjs (2KB) or Temporal API
-import dayjs from "dayjs";
+})
 ```
 
 **Tree-shaking checklist:**
