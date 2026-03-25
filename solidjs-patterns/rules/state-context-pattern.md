@@ -11,7 +11,32 @@ tags: state, context, store, global, provider
 
 Combine `createContext`, `createStore`, and a typed hook for app-wide state. Use getters on the context value to maintain reactivity through the provider boundary.
 
-**Correct pattern:**
+**Incorrect (captured value loses reactivity):**
+
+```typescript
+import { createContext, useContext, ParentComponent } from "solid-js"
+import { createStore } from "solid-js/store"
+
+const ThemeContext = createContext<{ theme: string; toggleTheme: () => void }>()
+
+export const ThemeProvider: ParentComponent = (props) => {
+  const [state, setState] = createStore({ theme: "light" as const })
+
+  // ❌ theme: state.theme captures the value ONCE — consumers won't see updates
+  const store = {
+    theme: state.theme,
+    toggleTheme: () => setState("theme", t => t === "light" ? "dark" : "light")
+  }
+
+  return (
+    <ThemeContext.Provider value={store}>
+      {props.children}
+    </ThemeContext.Provider>
+  )
+}
+```
+
+**Correct (getter maintains reactivity):**
 
 ```typescript
 import { createContext, useContext, ParentComponent } from "solid-js"

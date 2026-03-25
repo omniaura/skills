@@ -981,6 +981,71 @@ createEffect(() => {
 
 Reference: [SolidJS Docs - untrack](https://docs.solidjs.com/reference/reactive-utilities/untrack)
 
+## Use on() with Array for Multiple Explicit Dependencies
+
+**Impact: MEDIUM (prevents unwanted effect re-runs with precise dependency control)**
+
+Pass an array of accessors to `on()` for explicit multi-signal tracking with previous values. The callback body is untracked.
+
+**Incorrect:**
+
+```typescript
+// ❌ Auto-tracking captures ALL reads including unrelated signals
+createEffect(() => {
+  const a = signalA()
+  const b = signalB()
+  const config = configSignal()  // Unintended dependency!
+  analytics.track("change", { a, b })
+})
+```
+
+**Correct:**
+
+```typescript
+// ✅ Only tracks signalA and signalB, with previous values
+createEffect(on(
+  [() => signalA(), () => signalB()],
+  ([a, b], [prevA, prevB]) => {
+    const config = configSignal()  // NOT tracked
+    if (prevA !== undefined) {
+      analytics.track("change", { from: [prevA, prevB], to: [a, b] })
+    }
+  }
+))
+```
+
+Reference: [SolidJS on()](https://docs.solidjs.com/reference/reactive-utilities/on)
+
+## Debounce Effects with on() and onCleanup
+
+**Impact: MEDIUM (prevents excessive API calls and recomputations)**
+
+Use `on()` for explicit tracking + `onCleanup` to cancel pending timers for a clean debounce pattern.
+
+**Incorrect:**
+
+```typescript
+// ❌ Fires API call on every keystroke
+createEffect(() => {
+  const term = searchInput()
+  if (term.length > 2) performSearch(term)
+})
+```
+
+**Correct:**
+
+```typescript
+createEffect(on(
+  () => searchInput(),
+  (input) => {
+    const timer = setTimeout(() => performSearch(input), 300)
+    onCleanup(() => clearTimeout(timer))
+  }
+))
+```
+
+Reference: [SolidJS on()](https://docs.solidjs.com/reference/reactive-utilities/on)
+
 # 2. Data Fetching & Server
 
 **Impact: CRITICAL** — Correct data fetching patterns (createAsync, query, createResource, Solid Query) prevent waterfalls, avoid Suspense traps, and keep UIs responsive. SolidStart server functions ("use server") require input validation at the boundary.
@@ -1442,6 +1507,104 @@ const [data] = createResource(source, fetcher, { initialValue: [] })
 - This pattern is especially valuable for pagination, search-as-you-type, and dashboard auto-refresh
 
 Reference: [SolidJS createResource](https://docs.solidjs.com/reference/basic-reactivity/create-resource)
+
+## Use createInfiniteQuery for Paginated Data
+
+**Impact: HIGH (eliminates manual pagination state management)**
+
+Use `createInfiniteQuery` for cursor-based or offset-based pagination. Flatten pages with a derived signal, and use `hasPreviousPage`/`hasNextPage` for load-more controls.
+
+**Incorrect (manual pagination with createQuery):**
+
+```typescript
+const [page, setPage] = createSignal(0)
+const [allMessages, setAllMessages] = createSignal<Message[]>([])
+const query = createQuery(() => ({
+  queryKey: ["messages", props.conversationId, page()],
+  queryFn: () => fetchMessages(props.conversationId, page()),
+}))
+// ❌ Manual accumulation, race conditions, no bidirectional loading
+```
+
+**Correct (createInfiniteQuery):**
+
+```typescript
+const query = createInfiniteQuery(() => ({
+  queryKey: ["messages", props.conversationId],
+  queryFn: ({ pageParam }) => fetchMessages(props.conversationId, pageParam),
+  initialPageParam: null as string | null,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  getPreviousPageParam: (firstPage) => firstPage.prevCursor,
+}))
+const allMessages = () => query.data?.pages.flatMap((page) => page.items) ?? []
+```
+
+Reference: [TanStack Solid Query Infinite Queries](https://tanstack.com/query/latest/docs/framework/solid/guides/infinite-queries)
+
+## Use throwOnError with ErrorBoundary for Query Errors
+
+**Impact: MEDIUM (declarative error handling without manual checks)**
+
+Use `throwOnError: true` on queries to let errors bubble to the nearest `ErrorBoundary`. Pairs naturally with `Suspense`.
+
+**Incorrect (manual error checking in every component):**
+
+```typescript
+// ❌ Every component repeats isError/isLoading/data boilerplate
+return (
+  <div>
+    <Show when={query.isError}><ErrorMsg /></Show>
+    <Show when={query.isLoading}><Spinner /></Show>
+    <Show when={query.data}><Content /></Show>
+  </div>
+)
+```
+
+**Correct (throwOnError + ErrorBoundary):**
+
+```typescript
+const query = createQuery(() => ({
+  queryKey: ["users"],
+  queryFn: fetchUsers,
+  throwOnError: true,
+}))
+
+// Parent:
+<ErrorBoundary fallback={(err) => <UserListError error={err} />}>
+  <Suspense fallback={<UserListSkeleton />}>
+    <UserList />
+  </Suspense>
+</ErrorBoundary>
+```
+
+Reference: [TanStack Query Error Handling](https://tanstack.com/query/latest/docs/framework/solid/guides/suspense)
+
+## Use Switch/Match for Mutually Exclusive Query States
+
+**Impact: MEDIUM (prevents showing stale data during loading/error transitions)**
+
+Use `Switch`/`Match` instead of multiple `Show` for query states (pending, error, success) — they're mutually exclusive.
+
+**Incorrect:**
+
+```typescript
+// ❌ Multiple Shows can render simultaneously during transitions
+<Show when={query.isLoading}><Spinner /></Show>
+<Show when={query.error}><ErrorMessage /></Show>
+<Show when={query.data}><UserCard /></Show>
+```
+
+**Correct:**
+
+```typescript
+<Switch>
+  <Match when={query.isPending}><Skeleton /></Match>
+  <Match when={query.isError}><ErrorState error={query.error} retry={query.refetch} /></Match>
+  <Match when={query.isSuccess}><UserCard user={query.data!} /></Match>
+</Switch>
+```
+
+Reference: [SolidJS Switch/Match](https://docs.solidjs.com/reference/components/switch-and-match)
 
 # 3. Component Patterns
 

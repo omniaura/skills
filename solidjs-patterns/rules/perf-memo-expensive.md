@@ -1,6 +1,7 @@
 ---
 title: Use createMemo for Expensive Derived Computations
 impact: MEDIUM
+impactDescription: prevents redundant expensive recomputations
 tags: performance, memo, derived-state
 ---
 
@@ -55,3 +56,5 @@ const name = createMemo(() => user().name)
 - `createMemo` is lazy — it only runs when read and when dependencies changed
 - Chain memos for multi-step transformations: filter → sort → paginate
 - Don't wrap simple getters or property access — the memo overhead costs more than it saves
+
+Reference: [SolidJS createMemo](https://docs.solidjs.com/reference/basic-reactivity/create-memo)
