@@ -1,6 +1,6 @@
 # SolidJS Patterns — Complete Rule Reference
 
-> **90 rules** across 9 sections, ordered by impact.
+> **102 rules** across 9 sections, ordered by impact.
 
 ---
 
@@ -5005,3 +5005,243 @@ bun add @solid-primitives/media @solid-primitives/scheduled
 ```
 
 Reference: [Solid Primitives](https://github.com/solidjs-community/solid-primitives)
+
+## Configure Tailwind CSS v4 with SolidJS Using Vite Plugin
+
+**Impact: MEDIUM (broken styles or unnecessary PostCSS overhead)**
+
+Tailwind CSS v4 replaces `tailwind.config.js` with a CSS-first `@theme` directive and uses a dedicated Vite plugin instead of PostCSS. In SolidJS projects, use `@tailwindcss/vite` (not the PostCSS plugin) and place it before `vite-plugin-solid` in the plugins array.
+
+**Incorrect (v3 config approach or wrong plugin order):**
+
+```typescript
+// vite.config.ts — BAD: using PostCSS plugin instead of Vite plugin
+import solidPlugin from "vite-plugin-solid"
+export default defineConfig({
+  plugins: [solidPlugin()],
+  css: { postcss: { plugins: [require("tailwindcss")] } },
+})
+```
+
+**Correct (v4 Vite plugin + CSS-first config):**
+
+```typescript
+// vite.config.ts
+import tailwindcss from "@tailwindcss/vite"
+import solidPlugin from "vite-plugin-solid"
+export default defineConfig({
+  plugins: [tailwindcss(), solidPlugin()], // tailwindcss first
+})
+```
+
+```css
+/* src/index.css */
+@import "tailwindcss";
+@theme {
+  --color-primary: hsl(220 90% 56%);
+  --font-body: "Inter", sans-serif;
+}
+```
+
+Key: `@import "tailwindcss"` replaces `@tailwind` directives. Theme values become CSS variables automatically.
+
+Reference: [Tailwind CSS v4 SolidJS Installation](https://tailwindcss.com/docs/installation/framework-guides/solidjs)
+
+## Use @solid-primitives/i18n with Lazy Dictionary Loading
+
+**Impact: MEDIUM (large bundle from inlined translations or flash during locale switch)**
+
+Use `@solid-primitives/i18n` with dynamically imported dictionaries per locale. Flatten dictionaries for efficient key lookup, load with `createResource`, and wrap locale switches in `useTransition` to avoid content flash.
+
+**Incorrect (all locales bundled):**
+
+```typescript
+import en from "~/locales/en.json"
+import es from "~/locales/es.json"
+import fr from "~/locales/fr.json"
+// All 3 dictionaries ship to every user
+```
+
+**Correct (lazy-loaded with transition):**
+
+```typescript
+import * as i18n from "@solid-primitives/i18n"
+
+const fetchDictionary = async (locale: string) => {
+  const dict = await import(`~/locales/${locale}.json`)
+  return i18n.flatten(dict.default)
+}
+
+function createI18n(initialLocale = "en") {
+  const [locale, setLocale] = createSignal(initialLocale)
+  const [dict] = createResource(locale, fetchDictionary)
+  const t = i18n.translator(dict)
+  const [pending, start] = useTransition()
+  const switchLocale = (next: string) => start(() => setLocale(next))
+  return { t, locale, switchLocale, pending }
+}
+```
+
+Reference: [@solid-primitives/i18n](https://primitives.solidjs.community/package/i18n/)
+
+---
+
+# 4. State Management
+
+## Use Store Path Syntax for Surgical Nested Updates
+
+**Impact: MEDIUM-HIGH (unnecessary re-renders from coarse updates)**
+
+Store setters accept path arguments that update specific nested properties. Each path segment narrows the update scope so only subscribers of that exact path re-render.
+
+**Incorrect (replacing entire objects):**
+
+```typescript
+const [state, setState] = createStore({
+  users: [{ id: 1, name: "Alice", prefs: { theme: "dark" } }],
+})
+// BAD: replaces entire users array — all user components re-render
+setState({ ...state, users: state.users.map(u => u.id === 1 ? { ...u, name: "Alicia" } : u) })
+```
+
+**Correct (path syntax for surgical updates):**
+
+```typescript
+setState("users", 0, "prefs", "theme", "light")           // by index path
+setState("users", u => u.id === 2, "name", "Robert")       // by predicate
+setState("count", c => c + 1)                               // functional update
+setState("users", state.users.length, { id: 3, name: "Carol", prefs: { theme: "dark" } }) // append
+```
+
+Rule of thumb: path syntax for 1-2 property updates, `produce()` for 3+ or complex mutations.
+
+Reference: [SolidJS Store API](https://docs.solidjs.com/concepts/stores)
+
+---
+
+# 6. SolidStart Patterns
+
+## Use Vinxi useSession for Encrypted Cookie Sessions
+
+**Impact: HIGH (insecure session handling or server-side leaks)**
+
+Sessions must only be called inside `"use server"` functions. Always wrap in a typed helper for reuse.
+
+**Incorrect (session outside server context):**
+
+```typescript
+// BAD: calling useSession in a component exposes the password
+const session = useSession({ password: "short" })
+```
+
+**Correct (server-only typed helper):**
+
+```typescript
+import { useSession } from "vinxi/http"
+type UserSession = { userId: string; role: "admin" | "user" }
+
+function getSession() {
+  "use server"
+  return useSession<UserSession>({
+    password: process.env.SESSION_SECRET!, // 32+ chars
+    name: "app-session",
+  })
+}
+
+async function login(userId: string) {
+  "use server"
+  const session = await getSession()
+  await session.update({ userId, role: "user" })
+}
+```
+
+Reference: [SolidStart Session Docs](https://docs.solidjs.com/solid-start/advanced/session)
+
+## Share Validation Schema Between Client Form and Server Action
+
+**Impact: HIGH (duplicated validation logic or missed server-side checks)**
+
+Define a single Zod/Valibot schema in a shared module. Use it for client-side form validation and server-side action validation.
+
+**Incorrect (duplicated or missing validation):**
+
+```typescript
+// BAD: client validates email differently than server (or server doesn't validate)
+const valid = () => email().includes("@")
+```
+
+**Correct (shared schema):**
+
+```typescript
+// src/schemas/contact.ts
+import { z } from "zod"
+export const ContactSchema = z.object({
+  email: z.string().email("Invalid email"),
+  message: z.string().min(10).max(1000),
+})
+
+// Client: createForm({ validate: zodForm(ContactSchema) })
+// Server action: ContactSchema.safeParse(Object.fromEntries(formData))
+```
+
+Reference: [Modular Forms SolidJS Guide](https://modularforms.dev/solid/guides/introduction)
+
+## Use query() + preload for Route-Level Auth Guards
+
+**Impact: HIGH (unauthorized access or flash of protected content)**
+
+Use `query()` + `redirect()` in a route's `preload` function for route-specific auth requirements. Use `deferStream: true` to ensure redirects fire before streaming.
+
+**Incorrect (auth check inside component):**
+
+```typescript
+function AdminDashboard() {
+  const session = createAsync(() => getSession())
+  createEffect(() => {
+    if (session()?.role !== "admin") navigate("/unauthorized") // flash of content
+  })
+}
+```
+
+**Correct (query + preload):**
+
+```typescript
+export const requireAdmin = query(async () => {
+  "use server"
+  const user = await requireUser()
+  if (user.role !== "admin") throw redirect("/unauthorized")
+  return user
+}, "requireAdmin")
+
+export const route = { preload: () => requireAdmin() }
+export default function AdminLayout(props: RouteSectionProps) {
+  const user = createAsync(() => requireAdmin(), { deferStream: true })
+  return <Show when={user()}>{props.children}</Show>
+}
+```
+
+Reference: [SolidStart Auth Guide](https://docs.solidjs.com/solid-start/advanced/auth)
+
+## Configure Nitro Presets for Target Deployment
+
+**Impact: MEDIUM (failed deployments or missing platform features)**
+
+Set `server.preset` in `app.config.ts` to match your deployment target.
+
+```typescript
+// app.config.ts — Cloudflare Pages
+import { defineConfig } from "@solidjs/start/config"
+export default defineConfig({
+  server: {
+    preset: "cloudflare_pages",
+    compatibilityFlags: ["nodejs_compat_v2"],
+  },
+})
+
+// Docker pattern for node-server preset
+// CMD ["node", ".output/server/index.mjs"]
+```
+
+Common presets: `node-server`, `cloudflare_pages`, `vercel`, `netlify`, `deno`, `bun`, `static`
+
+Reference: [Nitro Deploy Docs](https://nitro.build/deploy)

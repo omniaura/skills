@@ -9,7 +9,7 @@ metadata:
 
 # SolidJS Patterns and Best Practices
 
-Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 90 rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
+Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 102 rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
 
 ## When to Apply
 
@@ -84,6 +84,7 @@ Reference these guidelines when:
 - `state-form-store` - Use createStore for multi-field form state
 - `state-expandable-list-store` - Use boolean array store for expandable/collapsible lists
 - `state-selection-pattern` - Choose signal vs store for selection state based on cardinality
+- `state-store-path-syntax` - Use store path syntax for surgical nested updates
 
 ### 5. Rendering & Control Flow (MEDIUM-HIGH)
 
@@ -108,6 +109,10 @@ Reference these guidelines when:
 - `start-defer-stream` - Use deferStream for header-modifying queries
 - `start-server-function-security` - Validate all inputs in "use server" functions (they're public endpoints)
 - `start-middleware-locals` - Use createMiddleware with event.locals for request-scoped state
+- `start-session-management` - Use Vinxi useSession for encrypted cookie sessions
+- `start-shared-schema-validation` - Share validation schema between client form and server action
+- `start-route-auth-guard` - Use query() + preload for route-level auth guards
+- `start-nitro-deployment` - Configure Nitro presets for target deployment
 
 ### 7. Performance Optimization (MEDIUM)
 
@@ -136,6 +141,8 @@ Reference these guidelines when:
 - `interop-observable-export` - Use observable() to expose signals to external libraries
 - `interop-kobalte-accessible-components` - Use Kobalte for accessible dialogs, menus, selects
 - `interop-solid-primitives` - Check @solid-primitives before building custom hooks
+- `interop-tailwind-v4-setup` - Configure Tailwind CSS v4 with SolidJS using Vite plugin
+- `interop-i18n-lazy-loading` - Use @solid-primitives/i18n with lazy dictionary loading
 
 ## How to Use
 
