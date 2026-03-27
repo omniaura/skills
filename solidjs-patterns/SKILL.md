@@ -4,12 +4,12 @@ description: SolidJS and SolidStart performance and correctness guidelines for A
 license: MIT
 metadata:
   author: omniaura
-  version: "2.1.0"
+  version: "2.2.0"
 ---
 
 # SolidJS Patterns and Best Practices
 
-Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 102 rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
+Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 107 rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
 
 ## When to Apply
 
@@ -56,6 +56,7 @@ Reference these guidelines when:
 - `reactivity-async-effect-tracking` - Never use async/await inside createEffect — tracking lost after await
 - `reactivity-batch-async-caveat` - batch() only batches synchronous updates
 - `reactivity-create-computed` - Use createComputed for synchronous pre-render derived state
+- `reactivity-pagination-scroll-blocking` - Use synchronous signals to block UI during async pagination
 
 ### 2. Data Fetching & Server (CRITICAL)
 
@@ -65,6 +66,8 @@ Reference these guidelines when:
 - `data-include-all-query-keys` - Include all dependencies in query keys
 - `data-query-options-function` - Wrap query options in arrow function
 - `data-mutation-invalidation` - Invalidate queries after mutations
+- `data-no-toplevel-query-access` - Never access query data at component top level
+- `data-no-capture-query-in-effect` - Access query data directly in effects, don't assign to variables
 
 ### 3. Component Patterns (HIGH)
 
@@ -123,6 +126,8 @@ Reference these guidelines when:
 - `perf-skeleton-suspense` - Use skeleton components for Suspense fallbacks
 - `perf-use-transition` - Use useTransition for non-blocking async updates
 - `perf-render-effect` - Use createRenderEffect for synchronous DOM measurements
+- `perf-lazy-show-pattern` - Use LazyShow pattern for conditionally-rendered heavy components
+- `perf-performance-budgets` - Set performance budgets for SolidJS apps
 
 ### 8. Testing (LOW-MEDIUM)
 

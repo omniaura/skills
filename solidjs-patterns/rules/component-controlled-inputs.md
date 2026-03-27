@@ -71,4 +71,4 @@ function PhoneInput() {
 
 **Note:** File inputs (`<input type="file">`) cannot be controlled — their `value` is read-only for security reasons. Use `onChange` to capture the selected file.
 
-Reference: [SolidJS Docs - Control Flow](https://docs.solidjs.com/concepts/control-flow)
+Reference: [SolidJS Docs - Event Handlers](https://docs.solidjs.com/concepts/components/event-handlers)

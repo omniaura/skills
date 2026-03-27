@@ -1,6 +1,6 @@
 ---
 title: Wrap Reactive Test Code in createRoot
-impact: LOW-MEDIUM
+impact: MEDIUM
 impactDescription: Leaked reactive contexts, orphaned effects in tests
 tags: testing, createRoot, vitest, reactive, cleanup
 ---

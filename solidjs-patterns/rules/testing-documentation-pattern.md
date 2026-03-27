@@ -1,6 +1,6 @@
 ---
 title: Write documentation tests as living pattern references
-impact: LOW-MEDIUM
+impact: LOW
 impactDescription: Pattern knowledge lost when not captured in test suite
 tags: testing, documentation, patterns, conventions
 ---

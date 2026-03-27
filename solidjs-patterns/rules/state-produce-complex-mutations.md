@@ -1,6 +1,7 @@
 ---
 title: Use produce() for Complex Store Mutations
 impact: HIGH
+impactDescription: prevents missed reactivity on multi-field updates
 tags: state, store, mutation, produce
 ---
 
@@ -41,3 +42,5 @@ setState(produce(draft => {
 - Each property mutation still triggers only the subscribers of that property
 - Especially useful for array operations (push, splice, sort) that are awkward with path-based setters
 - Import from `solid-js/store`, not `solid-js`
+
+Reference: [SolidJS produce](https://docs.solidjs.com/reference/store-utilities/produce)

@@ -1,6 +1,6 @@
 # SolidJS Patterns — Complete Rule Reference
 
-> **102 rules** across 9 sections, ordered by impact.
+> **107 rules** across 9 sections, ordered by impact.
 
 ---
 
@@ -1046,6 +1046,50 @@ createEffect(on(
 
 Reference: [SolidJS on()](https://docs.solidjs.com/reference/reactive-utilities/on)
 
+## Use Synchronous Signals to Block UI During Async Pagination
+
+**Impact: MEDIUM (prevents scroll-to-bottom jumping during paginated data loading)**
+
+When loading older messages or paginated data, UI actions like scroll-to-bottom must be blocked during the async gap between requesting and receiving data. Use a synchronous signal set *before* the async call — don't rely on query state which updates *after* the request completes.
+
+**Incorrect (relying on async query state — scroll jumps):**
+
+```typescript
+const handleLoadMore = () => {
+  fetchNextPage()  // isFetchingNextPage updates AFTER this returns
+}
+
+createEffect(() => {
+  if (!isFetchingNextPage) {
+    scrollToBottom()  // ❌ Fires immediately before fetch state updates
+  }
+})
+```
+
+**Correct (synchronous signal blocks scroll during async gap):**
+
+```typescript
+const [isPaginatingNow, setIsPaginatingNow] = createSignal(false)
+
+const handleLoadMore = () => {
+  setIsPaginatingNow(true)  // ✅ Set IMMEDIATELY, BEFORE async call
+  fetchNextPage()
+}
+
+createEffect(() => {
+  if (!isFetchingNextPage && isPaginatingNow()) {
+    setTimeout(() => setIsPaginatingNow(false), 500)
+  }
+})
+
+createEffect(() => {
+  if (isPaginatingNow()) return  // ✅ Block scroll-to-bottom
+  scrollToBottom()
+})
+```
+
+Reference: [SolidJS Signals](https://docs.solidjs.com/reference/basic-reactivity/create-signal)
+
 # 2. Data Fetching & Server
 
 **Impact: CRITICAL** — Correct data fetching patterns (createAsync, query, createResource, Solid Query) prevent waterfalls, avoid Suspense traps, and keep UIs responsive. SolidStart server functions ("use server") require input validation at the boundary.
@@ -1605,6 +1649,71 @@ Use `Switch`/`Match` instead of multiple `Show` for query states (pending, error
 ```
 
 Reference: [SolidJS Switch/Match](https://docs.solidjs.com/reference/components/switch-and-match)
+
+## Never Access Query Data at Component Top Level
+
+**Impact: CRITICAL (creates a static snapshot that never updates — UI shows stale data)**
+
+Assigning `query.data?.prop` to a `const` at the component top level captures the value once at component creation. Since SolidJS components run once (not per-render), the variable never updates when the query resolves or refetches.
+
+**Incorrect (top-level access creates static snapshot):**
+
+```typescript
+const query = createQuery(() => ({
+  queryKey: ["user"],
+  queryFn: fetchUser,
+}))
+
+const userName = query.data?.name  // ❌ Captured once — always undefined or stale
+
+return <div>{userName}</div>  // Never updates
+```
+
+**Correct (access inside JSX or createMemo):**
+
+```typescript
+const query = createQuery(() => ({
+  queryKey: ["user"],
+  queryFn: fetchUser,
+}))
+
+return <div>{query.data?.name}</div>
+
+// Or with createMemo:
+const userName = createMemo(() => query.data?.name)
+return <div>{userName()}</div>
+```
+
+Reference: [Solid Query Overview](https://tanstack.com/query/latest/docs/solid/overview)
+
+## Access Query Data Directly in Effects — Don't Assign to Variables
+
+**Impact: HIGH (effect never re-runs when query data updates)**
+
+Assigning `query.data` to a `const` inside an effect body captures the current value but does not create a reactive dependency.
+
+**Incorrect (variable assignment breaks tracking):**
+
+```typescript
+createEffect(() => {
+  const data = query.data  // ❌ Captured once
+  if (data) {
+    analytics.track("data_loaded", { count: data.length })
+  }
+})
+```
+
+**Correct (direct access creates reactive dependency):**
+
+```typescript
+createEffect(() => {
+  if (query.data) {  // ✅ Reactive dependency created
+    analytics.track("data_loaded", { count: query.data.length })
+  }
+})
+```
+
+Reference: [Solid Query Overview](https://tanstack.com/query/latest/docs/solid/overview)
 
 # 3. Component Patterns
 
@@ -4304,6 +4413,61 @@ function TabSwitcher() {
 - Only wrap updates that trigger Suspense; non-async updates gain nothing from transitions
 
 Reference: [SolidJS useTransition docs](https://docs.solidjs.com/reference/reactive-utilities/use-transition)
+
+## Use LazyShow Pattern for Conditionally-Rendered Heavy Components
+
+**Impact: MEDIUM (prevents Suspense layout flicker for modals and conditional UI)**
+
+When lazy-loading components that are conditionally rendered (modals, drawers, tabs), place `<Suspense>` inside `<Show>` — not the other way around.
+
+**Incorrect (Suspense wrapping Show — flicker on toggle):**
+
+```tsx
+const HeavyModal = lazy(() => import("./HeavyModal"))
+
+function App() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <Show when={isOpen()}>
+        <HeavyModal />  {/* ❌ Suspense boundary causes flicker */}
+      </Show>
+    </Suspense>
+  )
+}
+```
+
+**Correct (LazyShow pattern — Show wrapping Suspense):**
+
+```tsx
+function LazyShow<T>(props: { when: T | undefined | null | false; fallback?: JSX.Element; children: (value: NonNullable<T>) => JSX.Element }) {
+  return (
+    <Show when={props.when}>
+      {(value) => (
+        <Suspense fallback={props.fallback}>
+          {props.children(value())}
+        </Suspense>
+      )}
+    </Show>
+  )
+}
+```
+
+Reference: [SolidJS Suspense](https://docs.solidjs.com/reference/components/suspense)
+
+## Set Performance Budgets for SolidJS Apps
+
+**Impact: LOW (prevents bundle bloat and slow page loads)**
+
+| Metric | Target |
+|--------|--------|
+| Initial bundle | < 200KB gzipped |
+| Route chunks | < 50KB per route |
+| Time to Interactive | < 3s on 3G |
+| Largest Contentful Paint | < 2.5s |
+
+Use `rollup-plugin-visualizer` to track bundle size, lazy load heavy dependencies (lodash, chart.js, markdown-it), and enforce budgets in CI.
+
+Reference: [Vite Build Options](https://vite.dev/config/build-options)
 
 # 8. Testing
 
