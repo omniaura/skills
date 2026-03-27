@@ -1,6 +1,6 @@
 # SolidJS Patterns — Complete Rule Reference
 
-> **107 rules** across 9 sections, ordered by impact.
+> **110 rules** across 9 sections, ordered by impact.
 
 ---
 
@@ -1715,6 +1715,38 @@ createEffect(() => {
 
 Reference: [Solid Query Overview](https://tanstack.com/query/latest/docs/solid/overview)
 
+## Use query.keyFor() for Targeted Cache Invalidation
+
+**Impact: HIGH (all queries refetch after every action instead of only affected ones)**
+
+By default, SolidStart revalidates ALL cached queries after any `action()`. Use `query.keyFor(args)` to invalidate only affected entries.
+
+**Incorrect (all queries refetch):**
+
+```typescript
+const updateUser = action(async (data: FormData) => {
+  "use server";
+  const id = String(data.get("id"));
+  await db.users.update(id, { name: String(data.get("name")) });
+  throw redirect(`/users/${id}`);  // ❌ ALL queries refetch
+});
+```
+
+**Correct (targeted invalidation):**
+
+```typescript
+const updateUser = action(async (data: FormData) => {
+  "use server";
+  const id = String(data.get("id"));
+  await db.users.update(id, { name: String(data.get("name")) });
+  throw redirect(`/users/${id}`, {
+    revalidate: getUser.keyFor(id),  // ✅ Only this user query refetches
+  });
+});
+```
+
+Reference: [SolidStart query](https://docs.solidjs.com/solid-router/reference/data-apis/query)
+
 # 3. Component Patterns
 
 **Impact: HIGH** — Props handling (splitProps, mergeProps), children patterns, and component composition are unique in SolidJS. Destructuring breaks reactivity, rest spread loses tracking, and component functions run once (not per-render like React).
@@ -2902,6 +2934,33 @@ const [state, setState] = createStore({
 
 Reference: [SolidJS Stores](https://docs.solidjs.com/concepts/stores)
 
+## Use unwrap() When Passing Stores to Third-Party Libraries
+
+**Impact: MEDIUM (third-party code fails or behaves unexpectedly with Proxy objects)**
+
+SolidJS stores are `Proxy` objects. Libraries like lodash, Ajv, or `structuredClone` may not work correctly with proxies. Use `unwrap()` to get a plain object first.
+
+**Incorrect (passing proxy to external library):**
+
+```typescript
+const [formState, setFormState] = createStore({ name: "", email: "" });
+const copy = structuredClone(formState);  // ❌ Throws on Proxy
+const snapshot = cloneDeep(formState);     // ❌ May miss properties
+```
+
+**Correct (unwrap before external use):**
+
+```typescript
+import { unwrap } from "solid-js/store";
+const plain = unwrap(formState);
+const copy = structuredClone(plain);  // ✅ Works
+await fetch("/api", { body: JSON.stringify(unwrap(formState)) });  // ✅
+```
+
+**Note:** `unwrap()` returns a shallow reference, not a clone. You don't need it when passing stores to other SolidJS components or using `produce()`/`reconcile()`.
+
+Reference: [SolidJS unwrap](https://docs.solidjs.com/reference/store-utilities/unwrap)
+
 # 5. Rendering & Control Flow
 
 **Impact: MEDIUM-HIGH** — SolidJS control flow components (Show, For, Switch, Index, ErrorBoundary) are not syntactic sugar — they're performance-critical. Using JSX conditionals or .map() instead causes full remounts and lost state.
@@ -3996,6 +4055,37 @@ async function createPost(input: unknown) {
 ```
 
 Reference: [SolidStart "use server"](https://docs.solidjs.com/solid-start/reference/server/use-server)
+
+## Middleware Does NOT Run on Client-Side Navigations
+
+**Impact: CRITICAL (auth bypass — users can navigate to protected routes without server-side checks)**
+
+SolidStart middleware only runs on full-page server requests. Client-side navigations skip middleware entirely. Always validate authorization at the data layer (server functions) too.
+
+**Incorrect (auth only in middleware):**
+
+```typescript
+// ❌ Server function trusts middleware did the auth check
+const getProfile = query(async () => {
+  "use server";
+  const event = getRequestEvent()!;
+  return db.users.find(event.locals.session.userId);
+}, "profile");
+```
+
+**Correct (defense in depth):**
+
+```typescript
+const getProfile = query(async () => {
+  "use server";
+  const event = getRequestEvent()!;
+  const session = event.locals.session ?? getSessionFromCookie(event.request.headers);
+  if (!session) throw redirect("/login");  // ✅ Always validate
+  return db.users.find(session.userId);
+}, "profile");
+```
+
+Reference: [SolidStart Middleware](https://docs.solidjs.com/solid-start/advanced/middleware)
 
 # 7. Performance Optimization
 

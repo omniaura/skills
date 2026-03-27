@@ -9,7 +9,7 @@ metadata:
 
 # SolidJS Patterns and Best Practices
 
-Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 107 rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
+Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 110 rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
 
 ## When to Apply
 
@@ -68,6 +68,7 @@ Reference these guidelines when:
 - `data-mutation-invalidation` - Invalidate queries after mutations
 - `data-no-toplevel-query-access` - Never access query data at component top level
 - `data-no-capture-query-in-effect` - Access query data directly in effects, don't assign to variables
+- `data-query-targeted-invalidation` - Use query.keyFor() for targeted cache invalidation
 
 ### 3. Component Patterns (HIGH)
 
@@ -88,6 +89,7 @@ Reference these guidelines when:
 - `state-expandable-list-store` - Use boolean array store for expandable/collapsible lists
 - `state-selection-pattern` - Choose signal vs store for selection state based on cardinality
 - `state-store-path-syntax` - Use store path syntax for surgical nested updates
+- `state-unwrap-for-external` - Use unwrap() when passing stores to third-party libraries
 
 ### 5. Rendering & Control Flow (MEDIUM-HIGH)
 
@@ -116,6 +118,7 @@ Reference these guidelines when:
 - `start-shared-schema-validation` - Share validation schema between client form and server action
 - `start-route-auth-guard` - Use query() + preload for route-level auth guards
 - `start-nitro-deployment` - Configure Nitro presets for target deployment
+- `start-middleware-client-nav-caveat` - Middleware does NOT run on client-side navigations — always validate at data layer
 
 ### 7. Performance Optimization (MEDIUM)
 
