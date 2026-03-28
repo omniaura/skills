@@ -1,0 +1,13 @@
+{
+  "name": "skills",
+  "private": true,
+  "scripts": {
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "oxfmt": "^0.42.0"
+  }
+}
