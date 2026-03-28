@@ -70,6 +70,7 @@ const Icon = (props) => {
 ```
 
 **Notes:**
+
 - `component` accepts strings (`"div"`, `"a"`) or components (`MyComponent`)
 - When `component` is reactive, `Dynamic` handles unmounting/remounting automatically
 - Combine with `splitProps` to separate the `as`/`component` prop from pass-through props

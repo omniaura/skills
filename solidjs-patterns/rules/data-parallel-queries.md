@@ -18,13 +18,13 @@ function Dashboard() {
   const usersQuery = createQuery(() => ({
     queryKey: ["users"],
     queryFn: fetchUsers,
-  }))
+  }));
 
   const statsQuery = createQuery(() => ({
     queryKey: ["stats"],
     queryFn: fetchStats,
-    enabled: !!usersQuery.data,  // Unnecessary dependency!
-  }))
+    enabled: !!usersQuery.data, // Unnecessary dependency!
+  }));
 }
 ```
 
@@ -35,13 +35,13 @@ function Dashboard() {
   const usersQuery = createQuery(() => ({
     queryKey: ["users"],
     queryFn: fetchUsers,
-  }))
+  }));
 
   const statsQuery = createQuery(() => ({
     queryKey: ["stats"],
     queryFn: fetchStats,
     // No enabled — fetches immediately in parallel
-  }))
+  }));
 }
 ```
 

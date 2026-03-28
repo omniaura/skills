@@ -34,6 +34,7 @@ function Button(props: { size?: "sm" | "md" | "lg" }) {
 ```
 
 **Notes:**
+
 - `mergeProps` creates a reactive proxy; later sources override earlier ones
 - Combine with `splitProps` when you also need to forward remaining props
 - For components with many defaults, `mergeProps` keeps the component body clean

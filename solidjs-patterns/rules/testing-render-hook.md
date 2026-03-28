@@ -14,34 +14,35 @@ When testing custom hooks (functions that use `createSignal`, `createEffect`, et
 **Incorrect (manual createRoot boilerplate):**
 
 ```typescript
-import { createRoot } from "solid-js"
+import { createRoot } from "solid-js";
 
 it("increments counter", () => {
-  createRoot(dispose => {
-    const counter = useCounter()
-    expect(counter.count()).toBe(0)
-    counter.increment()
-    expect(counter.count()).toBe(1)
-    dispose()
-  })
-})
+  createRoot((dispose) => {
+    const counter = useCounter();
+    expect(counter.count()).toBe(0);
+    counter.increment();
+    expect(counter.count()).toBe(1);
+    dispose();
+  });
+});
 ```
 
 **Correct (renderHook handles the reactive context):**
 
 ```typescript
-import { renderHook } from "@solidjs/testing-library"
+import { renderHook } from "@solidjs/testing-library";
 
 it("increments counter", () => {
-  const { result } = renderHook(() => useCounter())
+  const { result } = renderHook(() => useCounter());
 
-  expect(result.count()).toBe(0)
-  result.increment()
-  expect(result.count()).toBe(1)
-})
+  expect(result.count()).toBe(0);
+  result.increment();
+  expect(result.count()).toBe(1);
+});
 ```
 
 **Notes:**
+
 - `renderHook` creates both a reactive owner and a DOM rendering context, which some hooks require
 - The `result` object is whatever the hook function returns
 - Use `createRoot` directly when testing pure reactive logic with no DOM needs (stores, signals)

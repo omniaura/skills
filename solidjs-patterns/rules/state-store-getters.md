@@ -17,19 +17,19 @@ When a store property should be derived from other state (props, signals, or oth
 const [state, setState] = createStore({
   firstName: "John",
   lastName: "Doe",
-  fullName: "John Doe",  // BAD: static string, never updates
-})
+  fullName: "John Doe", // BAD: static string, never updates
+});
 ```
 
 **Incorrect (effect to sync — overly complex):**
 
 ```typescript
-const [state, setState] = createStore({ firstName: "John", lastName: "Doe", fullName: "" })
+const [state, setState] = createStore({ firstName: "John", lastName: "Doe", fullName: "" });
 
 // BAD: unnecessary effect, extra update cycle
 createEffect(() => {
-  setState("fullName", `${state.firstName} ${state.lastName}`)
-})
+  setState("fullName", `${state.firstName} ${state.lastName}`);
+});
 ```
 
 **Correct (getter — always current, zero overhead):**
@@ -38,11 +38,13 @@ createEffect(() => {
 const [state, setState] = createStore({
   firstName: "John",
   lastName: "Doe",
-  get fullName() { return `${this.firstName} ${this.lastName}` },
-})
+  get fullName() {
+    return `${this.firstName} ${this.lastName}`;
+  },
+});
 
 // state.fullName is always "John Doe" — updates when firstName or lastName change
-setState("firstName", "Jane")  // state.fullName is now "Jane Doe"
+setState("firstName", "Jane"); // state.fullName is now "Jane Doe"
 ```
 
 **Pattern: Bridge props into store with getters (from Hope UI, CodeImage):**
@@ -52,11 +54,19 @@ const [state, setState] = createStore({
   headerMounted: false,
   bodyMounted: false,
   // Reactive bridge from props — always reflects current prop value
-  get opened() { return props.opened },
-  get size() { return props.size ?? "md" },
-  get dialogId() { return props.id ?? defaultId },
-  get headerId() { return `${this.dialogId}--header` },
-})
+  get opened() {
+    return props.opened;
+  },
+  get size() {
+    return props.size ?? "md";
+  },
+  get dialogId() {
+    return props.id ?? defaultId;
+  },
+  get headerId() {
+    return `${this.dialogId}--header`;
+  },
+});
 ```
 
 **Pattern: Controlled/uncontrolled component with getter:**
@@ -64,12 +74,17 @@ const [state, setState] = createStore({
 ```typescript
 const [state, setState] = createStore({
   _internalValue: props.defaultValue ?? "",
-  get isControlled() { return props.value !== undefined },
-  get value() { return this.isControlled ? props.value : this._internalValue },
-})
+  get isControlled() {
+    return props.value !== undefined;
+  },
+  get value() {
+    return this.isControlled ? props.value : this._internalValue;
+  },
+});
 ```
 
 **Notes:**
+
 - Getters in stores use `this` to reference sibling properties — they compose naturally
 - Getters are NOT cached like `createMemo` — if the computation is expensive, combine with `createMemo` outside the store
 - This pattern replaces the common anti-pattern of syncing store state with effects

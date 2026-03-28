@@ -49,6 +49,7 @@ function App() {
 ```
 
 **Notes:**
+
 - The `fallback` receives the error object and a `reset` function that re-mounts the children
 - Place boundaries strategically: around route content, modals, and any component that parses external data
 - ErrorBoundary does not catch errors in event handlers or async code — only in the render/reactive tree

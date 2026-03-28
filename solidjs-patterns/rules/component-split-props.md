@@ -52,6 +52,7 @@ function Button(props: ButtonProps) {
 ```
 
 **Notes:**
+
 - `splitProps` returns proxied objects that preserve reactivity for all keys
 - The first argument lists keys to extract into `local`; everything else goes into the rest group
 - You can split into more than two groups: `splitProps(props, ["a"], ["b"])` returns three objects

@@ -57,6 +57,7 @@ function TabSwitcher() {
 ```
 
 **Notes:**
+
 - `startTransition` delays the state update until the new Suspense boundary resolves
 - `isPending()` is a reactive signal that is `true` while the transition is in progress — use it for subtle loading indicators (opacity, spinners on tabs)
 - This pattern is especially valuable for route transitions where the Suspense fallback would otherwise flash
