@@ -10,6 +10,7 @@ Battle-tested patterns for SolidJS development, including:
 
 - **Reactivity** — Fine-grained reactivity fundamentals
 - **State Patterns** — Signals, stores, and when to use each
+- **Async UI State** — Scoped pending state and stable signal snapshots
 - **Anti-Patterns** — Common mistakes and how to avoid them
 - **Solid-Query** — Data fetching with TanStack Query
 - **Performance** — Optimization techniques

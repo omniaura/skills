@@ -1,6 +1,6 @@
 # SolidJS Patterns — Complete Rule Reference
 
-Auto-generated compiled document of all 57 rules. For individual rules, see `rules/`.
+Auto-generated compiled document of all 65 rules. For individual rules, see `rules/`.
 
 ---
 
@@ -239,6 +239,60 @@ const filteredItems = createMemo(() => items().filter((item) => item.name.includ
 - If you find yourself writing `createEffect(() => setX(...))`, it's almost always a sign you should use a derived function or memo instead
 
 Reference: [SolidJS Derived Signals](https://docs.solidjs.com/concepts/derived-values/derived-signals)
+
+---
+
+## Snapshot Signal Values Before await When Stability Matters
+
+**Impact: HIGH (async handlers act on stale or unintended state after the UI changes)**
+
+Signals always return the current value. In async event handlers, that is often what you want. But when an operation must act on the value selected when the user clicked, snapshot the signal before the first `await` and pass stable primitives into the async work.
+
+**Incorrect (reads the current signal after async work):**
+
+```typescript
+async function approvePermission() {
+  if (!activePermission()) return;
+
+  await auditPermissionAttempt();
+
+  // activePermission() may now be a different request.
+  await respondPermission(activePermission()!.id, "allow");
+}
+```
+
+**Correct (snapshot the request before awaiting):**
+
+```typescript
+async function approvePermission() {
+  const request = activePermission();
+  if (!request) return;
+
+  const requestId = request.id;
+  await auditPermissionAttempt();
+  await respondPermission(requestId, "allow");
+}
+```
+
+**Correct (read after await only when latest state is intended):**
+
+```typescript
+async function refreshIfStillVisible() {
+  await refetch();
+
+  if (panelOpen()) {
+    focusResults();
+  }
+}
+```
+
+**Notes:**
+
+- Snapshot IDs, indexes, form values, and selected records before `await` when the operation belongs to that starting state
+- Re-read signals after `await` only when the code explicitly wants the latest state
+- Prefer passing the snapshot into helper functions instead of letting helpers call UI signals internally
+
+Reference: [SolidJS signals](https://docs.solidjs.com/concepts/signals)
 
 ---
 
@@ -1529,6 +1583,90 @@ Reference: [SolidJS createStore docs](https://docs.solidjs.com/reference/store-u
 
 ---
 
+## Scope Pending State to Each Async Action
+
+**Impact: HIGH (unrelated controls become disabled, causing blocked flows and stuck UI)**
+
+Avoid one shared `busy()` flag for a whole component when multiple async actions can overlap. A global flag couples unrelated controls and can block the very UI needed to finish the original task. Give each independent action its own pending signal, or use the pending state provided by `useSubmission()`, Solid Query mutations, or resources.
+
+**Incorrect (one global busy flag disables unrelated actions):**
+
+```typescript
+const [busy, setBusy] = createSignal(false);
+
+async function runInstall() {
+  if (busy()) return;
+  setBusy(true);
+  try {
+    await installPackage();
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function answerPermission(answer: "allow" | "deny") {
+  if (busy()) return;
+  setBusy(true);
+  try {
+    await respondToPermission(answer);
+  } finally {
+    setBusy(false);
+  }
+}
+
+<button disabled={busy()} onClick={runInstall}>Install</button>
+<button disabled={busy()} onClick={() => answerPermission("allow")}>Allow</button>
+<button disabled={busy()} onClick={() => answerPermission("deny")}>Deny</button>
+```
+
+**Correct (pending state matches the action it protects):**
+
+```typescript
+const [installing, setInstalling] = createSignal(false);
+const [respondingToPermission, setRespondingToPermission] = createSignal(false);
+
+async function runInstall() {
+  if (installing()) return;
+  setInstalling(true);
+  try {
+    await installPackage();
+  } finally {
+    setInstalling(false);
+  }
+}
+
+async function answerPermission(answer: "allow" | "deny") {
+  if (respondingToPermission()) return;
+  setRespondingToPermission(true);
+  try {
+    await respondToPermission(answer);
+  } finally {
+    setRespondingToPermission(false);
+  }
+}
+
+<button disabled={installing()} onClick={runInstall}>Install</button>
+<button disabled={respondingToPermission()} onClick={() => answerPermission("allow")}>Allow</button>
+<button disabled={respondingToPermission()} onClick={() => answerPermission("deny")}>Deny</button>
+```
+
+**Correct (derive disabled state from specific dependencies):**
+
+```typescript
+const canSend = createMemo(() => prompt().trim().length > 0 && !sending());
+
+<button disabled={!canSend()} onClick={sendMessage}>Send</button>
+```
+
+**Notes:**
+
+- A shared pending flag is fine only when the operations are truly mutually exclusive
+- Permission, confirmation, and cancellation UI should be disabled only by their own pending state
+- Derive button state with a function or `createMemo()` instead of duplicating booleans
+- For SolidStart form actions, prefer `action()` plus `useSubmission()` over hand-rolled pending state
+
+---
+
 ## Use produce() for Complex Store Mutations
 
 **Impact: HIGH (prevents missed reactivity on multi-field updates)**
@@ -1636,6 +1774,10 @@ const [isOpen, setIsOpen] = createSignal(false);
 const [position, setPosition] = createSignal({ x: 0, y: 0 });
 setPosition({ x: 10, y: 20 }); // Full replacement
 
+// Arrays replaced immutably
+const [items, setItems] = createSignal<Item[]>([]);
+setItems((current) => current.filter((item) => item.id !== removedId));
+
 // Simple derived values
 const [count, setCount] = createSignal(0);
 ```
@@ -1669,6 +1811,17 @@ setForm("name", "Alice"); // Only name field subscribers update
 | Complex nested state        | `createStore`                          | Path-based partial updates        |
 | Selection tracking (multi)  | `createStore<Record<string, boolean>>` | O(1) per-key updates              |
 | Selection tracking (single) | `createSignal` + `createSelector`      | O(1) with only 2 items updating   |
+
+**Signal-held objects and arrays must be replaced immutably:**
+
+```typescript
+// BAD: mutates the array in place; subscribers may not update as intended
+items().push(newItem);
+setItems(items());
+
+// GOOD: creates a new array reference
+setItems((current) => [...current, newItem]);
+```
 
 Reference: [SolidJS Stores](https://docs.solidjs.com/concepts/stores)
 

@@ -21,6 +21,10 @@ const [isOpen, setIsOpen] = createSignal(false);
 const [position, setPosition] = createSignal({ x: 0, y: 0 });
 setPosition({ x: 10, y: 20 }); // Full replacement
 
+// Arrays replaced immutably
+const [items, setItems] = createSignal<Item[]>([]);
+setItems((current) => current.filter((item) => item.id !== removedId));
+
 // Simple derived values
 const [count, setCount] = createSignal(0);
 ```
@@ -54,5 +58,16 @@ setForm("name", "Alice"); // Only name field subscribers update
 | Complex nested state        | `createStore`                          | Path-based partial updates        |
 | Selection tracking (multi)  | `createStore<Record<string, boolean>>` | O(1) per-key updates              |
 | Selection tracking (single) | `createSignal` + `createSelector`      | O(1) with only 2 items updating   |
+
+**Signal-held objects and arrays must be replaced immutably:**
+
+```typescript
+// BAD: mutates the array in place; subscribers may not update as intended
+items().push(newItem);
+setItems(items());
+
+// GOOD: creates a new array reference
+setItems((current) => [...current, newItem]);
+```
 
 Reference: [SolidJS Stores](https://docs.solidjs.com/concepts/stores)

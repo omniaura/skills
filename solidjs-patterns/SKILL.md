@@ -4,12 +4,12 @@ description: SolidJS and SolidStart performance and correctness guidelines for A
 license: MIT
 metadata:
   author: omniaura
-  version: "2.1.0"
+  version: "2.2.0"
 ---
 
 # SolidJS Patterns and Best Practices
 
-Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 49 rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
+Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 60+ rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
 
 ## When to Apply
 
@@ -54,6 +54,7 @@ Reference these guidelines when:
 - `reactivity-create-deferred` - Use createDeferred for expensive computations on rapid input
 - `reactivity-create-reaction` - Use createReaction to separate tracking from side effects
 - `reactivity-no-signal-capture` - Don't capture signals in closures outside reactive context
+- `reactivity-snapshot-async-values` - Snapshot signal values before await when stability matters
 
 ### 2. Data Fetching & Server (CRITICAL)
 
@@ -77,6 +78,7 @@ Reference these guidelines when:
 - `state-reconcile-async` - Use reconcile for fine-grained async updates
 - `state-produce-complex-mutations` - Use produce() for complex store mutations
 - `state-form-store` - Use createStore for multi-field form state
+- `state-scoped-async-actions` - Use one pending signal per async action, not one shared busy flag
 
 ### 5. Rendering & Control Flow (MEDIUM-HIGH)
 
@@ -133,6 +135,14 @@ Each rule file contains:
 - Correct code example with explanation
 - Impact rating and tags
 - Additional context and references
+
+## Practical UI Checklist
+
+- Does any button depend on a shared `busy()` flag that could be true during unrelated long-running work?
+- Could two async actions overlap and fight over one boolean?
+- Is any UI state duplicated when it could be derived with a function or `createMemo()`?
+- Does an async handler read a signal after `await` when it needed the value from the time the action started?
+- Are signal-held arrays and objects replaced immutably instead of mutated in place?
 
 ## Full Compiled Document
 
