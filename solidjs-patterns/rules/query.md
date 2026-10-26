@@ -8,7 +8,7 @@ Target `@tanstack/solid-query@6.0.0-rc.5` (and matching devtools). Continue usin
 
 `query.data` suspends when no data is ready; put normal consumers under `Loading` and errors under `Errored`. On invalidation/refetch, keep cached content visible; use `isFetching` for a subtle indicator, not an early return that hides the content. Solid already retains previous values; do not mechanically port `keepPreviousData`. Function placeholders no longer receive previous-data arguments.
 
-`query.data` is a reconciled store proxy whose identity stays stable across refetches **and query-key changes**. Identity checks (`data === lastData`) never observe a change: compare the query key/owner id or `snapshot(query.data)` content, and `snapshot()` anything you retain as "the previous data".
+For object and array results, `query.data` is a reconciled store proxy whose identity stays stable across refetches **and query-key changes**. Identity checks (`data === lastData`) never observe a change: compare the query key/owner id or `snapshot(query.data)` content, and `snapshot()` anything you retain as "the previous data".
 
 **Trap:** a disabled query with no cache can suspend indefinitely. `query.data ?? fallback` does not guard it: the read suspends before `??`. Status reads (`isPending`, `isSuccess`, `status`, `error`) do not suspend. In 6.0.0-rc.5, `isFetching` (and therefore `isLoading`, which is `isPending && isFetching`) reads the data node's pending state and **can** suspend a disabled, empty query; guard with `isPending`/`isSuccess` first and reserve `isFetching` for enabled queries or reads under `Loading`. Guard optional/disabled queries by status before reading data, or provide meaningful initial/placeholder data.
 
