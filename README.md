@@ -17,7 +17,7 @@ npx skills add omniaura/skills --skill solidjs-patterns
 Solid 1 projects should pin the previous skill revision, not install main:
 
 ```sh
-npx skills add omniaura/skills@76dfb33 --skill solidjs-patterns
+npx skills add 'omniaura/skills#76dfb331edd1059f230e3e4d2d04c1a4d2820006' --skill solidjs-patterns
 ```
 
 Or copy `solidjs-patterns/` from the appropriate revision into your agent's skills directory. Pin a reviewed revision in automated installs while Solid 2 is in RC.
