@@ -1,163 +1,42 @@
 ---
 name: solidjs-patterns
-description: SolidJS and SolidStart performance and correctness guidelines for AI agents. This skill should be used when writing, reviewing, or refactoring SolidJS/SolidStart code to ensure correct reactivity patterns and optimal performance. Triggers on tasks involving SolidJS components, signals, stores, Solid Query, SolidStart server functions, routing, or fine-grained reactivity.
+description: Write, review, and migrate Solid 2.0 RC applications using fine-grained reactivity, split effects, async memos, optimistic actions, draft stores, and TanStack Solid Query v6. Use for Solid components, state, data fetching, DOM interop, tests, or Solid 1-to-2 migration. Solid 2 only; use this repository's v2 skill for Solid 1.x.
 license: MIT
 metadata:
   author: omniaura
-  version: "2.2.0"
+  version: "3.0.0"
 ---
 
-# SolidJS Patterns and Best Practices
+# Solid 2 Patterns
 
-Comprehensive correctness and performance guide for SolidJS and SolidStart applications, maintained by OmniAura. Contains 60+ rules across 9 categories, prioritized by impact to guide automated refactoring and code generation. Built from production experience migrating from React to SolidJS.
+Target **Solid 2.0 RC** (`solid-js` + `@solidjs/web` rc.18), Query **v6 RC** (`6.0.0-rc.5`), and `@solidjs/vite-plugin@3.0.0-next.51`. RC behavior is version-sensitive: check installed types and test meaningful examples when updating versions. This is an SPA-compatible skill, not a requirement to adopt SolidStart or SSR.
 
-## When to Apply
+## Read only what the task needs
 
-Reference these guidelines when:
+| Task                                                     | Reference                                  |
+| -------------------------------------------------------- | ------------------------------------------ |
+| Signals, deferred writes, split effects, lifecycle       | [rules/reactivity.md](rules/reactivity.md) |
+| Async memos, Loading/Errored/Reveal, actions, optimism   | [rules/async.md](rules/async.md)           |
+| Query cache, suspending reads, mutations, rollback       | [rules/query.md](rules/query.md)           |
+| Draft stores, projections, context                       | [rules/state.md](rules/state.md)           |
+| Props, lists, classes, dynamic components, ref factories | [rules/components.md](rules/components.md) |
+| Compiler setup, test timing, migration verification      | [rules/testing.md](rules/testing.md)       |
 
-- Writing new SolidJS components or SolidStart pages
-- Migrating React code to SolidJS
-- Implementing data fetching (Solid Query, createAsync, createResource)
-- Working with SolidStart server functions ("use server")
-- Reviewing code for reactivity correctness issues
-- Optimizing bundle size or rendering performance
-- Setting up state management (signals, stores, context)
-- Writing tests for reactive code
+Full generated reference: [AGENTS.md](AGENTS.md).
 
-## Rule Categories by Priority
+## Defaults that prevent most bugs
 
-| Priority | Category                 | Impact      | Prefix        |
-| -------- | ------------------------ | ----------- | ------------- |
-| 1        | Reactivity Correctness   | CRITICAL    | `reactivity-` |
-| 2        | Data Fetching & Server   | CRITICAL    | `data-`       |
-| 3        | Component Patterns       | HIGH        | `component-`  |
-| 4        | State Management         | HIGH        | `state-`      |
-| 5        | Rendering & Control Flow | MEDIUM-HIGH | `rendering-`  |
-| 6        | SolidStart Patterns      | MEDIUM-HIGH | `start-`      |
-| 7        | Performance Optimization | MEDIUM      | `perf-`       |
-| 8        | Testing                  | LOW-MEDIUM  | `testing-`    |
-| 9        | External Interop         | LOW         | `interop-`    |
+1. Keep reactive reads in JSX/memos; derive values instead of writing them back. No signal writes in component/memo/compute scope.
+2. Setters are deferred and automatically batched. Carry local values forward; `flush()` only at explicit imperative boundaries/tests.
+3. Effects are `createEffect(compute, apply)`. Compute reads; apply performs side effects and **returns cleanup**. No `onCleanup` inside apply.
+4. Use `onSettled(() => { ... })`, with braces. Callback returns cleanup or nothing, never a setter value/promise.
+5. Async memo reads belong under local `Loading`/`Errored` boundaries. Keep stale content during updates; do not hide the whole app for refetches.
+6. Ref callbacks are unowned. Register cleanup in component setup or an owned ref factory, not inside the element callback.
+7. Stores use draft setters; props use `merge`/`omit`; context itself is the provider. Native classes use arrays/objects.
+8. Keep Query for shared cache/devtools/persistence needs, not merely to fetch one value. Query v6 `.data` suspends: guard disabled/no-cache queries by status.
+9. Query `mutate` returns a promise. No `mutateAsync`, per-call callbacks, or old `onMutate` rollback context. Shared cache optimism needs write → `flush()` → mutate; await invalidation in `onSuccess`.
+10. Test with the Solid 2 compiler and real runtime. Typechecking alone misses owned-write, cleanup, suspension, and transition behavior.
 
-## Quick Reference
+## Solid 1 migration checklist
 
-### 1. Reactivity Correctness (CRITICAL)
-
-- `reactivity-no-destructure-props` - Never destructure props — breaks reactivity
-- `reactivity-no-helper-access` - Access signals/stores directly in JSX, not via helpers
-- `reactivity-no-set-map-signal` - Use store instead of Set/Map with signal for collections
-- `reactivity-no-rest-spread` - Use splitProps instead of rest spread
-- `reactivity-signals-not-refs` - Use signals for timing-sensitive state, not plain refs
-- `reactivity-no-direct-mutation` - Never mutate store values directly
-- `reactivity-no-effect-order` - Don't assume effect execution order
-- `reactivity-cleanup-effects` - Always clean up effects with onCleanup
-- `reactivity-on-explicit-tracking` - Use on() to break circular dependencies
-- `reactivity-create-deferred` - Use createDeferred for expensive computations on rapid input
-- `reactivity-create-reaction` - Use createReaction to separate tracking from side effects
-- `reactivity-no-signal-capture` - Don't capture signals in closures outside reactive context
-- `reactivity-snapshot-async-values` - Snapshot signal values before await when stability matters
-
-### 2. Data Fetching & Server (CRITICAL)
-
-- `data-no-destructure-query` - Never destructure Solid Query results
-- `data-parallel-queries` - Don't create query waterfalls
-- `data-guard-suspense` - Guard .data access to prevent unwanted Suspense
-- `data-include-all-query-keys` - Include all dependencies in query keys
-- `data-query-options-function` - Wrap query options in arrow function
-- `data-mutation-invalidation` - Invalidate queries after mutations
-
-### 3. Component Patterns (HIGH)
-
-- `component-no-early-return` - Don't return early before reactive primitives
-- `component-merge-props` - Use mergeProps for reactive default values
-- `component-split-props` - Use splitProps to separate and forward props
-
-### 4. State Management (HIGH)
-
-- `state-signal-vs-store` - Choose signal vs store based on update granularity
-- `state-context-pattern` - Use typed context with store for global state
-- `state-reconcile-async` - Use reconcile for fine-grained async updates
-- `state-produce-complex-mutations` - Use produce() for complex store mutations
-- `state-form-store` - Use createStore for multi-field form state
-- `state-scoped-async-actions` - Use one pending signal per async action, not one shared busy flag
-
-### 5. Rendering & Control Flow (MEDIUM-HIGH)
-
-- `rendering-use-for-not-map` - Use `<For>` instead of .map() for lists
-- `rendering-use-show-not-ternary` - Use `<Show>` instead of JSX conditionals
-- `rendering-suspense-inside-show` - Place Suspense inside conditionals (LazyShow pattern)
-- `rendering-use-switch-match` - Use Switch/Match for multi-branch conditionals
-- `rendering-error-boundary` - Wrap risky components in ErrorBoundary
-- `rendering-index-vs-for` - Choose between For and Index based on what changes
-
-### 6. SolidStart Patterns (MEDIUM-HIGH)
-
-- `start-use-server-validation` - Always validate "use server" function inputs
-- `start-createasync-not-resource` - Use createAsync + query() for data loading
-- `start-route-preloading` - Always define route preload functions
-
-### 7. Performance Optimization (MEDIUM)
-
-- `perf-lazy-load-heavy-components` - Lazy load heavy components
-- `perf-create-selector` - Use createSelector for single-selection in large lists
-- `perf-memo-expensive` - Use createMemo for expensive derived computations
-- `perf-route-code-splitting` - Use lazy() for route-level code splitting
-- `perf-skeleton-suspense` - Use skeleton components for Suspense fallbacks
-- `perf-use-transition` - Use useTransition for non-blocking async updates
-- `perf-render-effect` - Use createRenderEffect for synchronous DOM measurements
-
-### 8. Testing (LOW-MEDIUM)
-
-- `testing-createroot` - Wrap reactive test code in createRoot
-- `testing-render-components` - Use render() and Testing Library for component tests
-- `testing-render-hook` - Use renderHook for testing custom hooks
-- `testing-async-waitfor` - Use waitFor for async component testing
-- `testing-mock-hoisted` - Use vi.hoisted with vi.mock for proper mock hoisting
-
-### 9. External Interop (LOW)
-
-- `interop-from-browser-apis` - Use from() to bridge browser APIs into reactive signals
-- `interop-observable-export` - Use observable() to expose signals to external libraries
-
-## How to Use
-
-Read individual rule files for detailed explanations and code examples:
-
-```
-rules/reactivity-no-destructure-props.md
-rules/data-parallel-queries.md
-rules/start-use-server-validation.md
-```
-
-Each rule file contains:
-
-- Brief explanation of why it matters
-- Incorrect code example with explanation
-- Correct code example with explanation
-- Impact rating and tags
-- Additional context and references
-
-## Practical UI Checklist
-
-- Does any button depend on a shared `busy()` flag that could be true during unrelated long-running work?
-- Could two async actions overlap and fight over one boolean?
-- Is any UI state duplicated when it could be derived with a function or `createMemo()`?
-- Does an async handler read a signal after `await` when it needed the value from the time the action started?
-- Are signal-held arrays and objects replaced immutably instead of mutated in place?
-
-## Full Compiled Document
-
-For the complete guide with all rules expanded: `AGENTS.md`
-
-## Legacy Files
-
-The following files contain additional detailed patterns and are being migrated into individual rules:
-
-- `reactivity.md` - Reactivity fundamentals
-- `explicit-tracking.md` - on() and untrack() patterns
-- `state-patterns.md` - State management patterns
-- `anti-patterns.md` - Common anti-patterns
-- `advanced-primitives.md` - Secondary primitives
-- `external-interop.md` - from() and observable() patterns
-- `solid-query.md` - Solid Query patterns
-- `performance.md` - Performance optimization
-- `testing.md` - Testing patterns
+Run the migration assistant, then verify Markdown examples and runtime semantics manually. Remove obsolete `batch`, `on`, `produce`, `onMount`, resource tuple patterns, and namespace directives; do not recreate them as compatibility wrappers. Update imports/types/compiler before debugging behavior. Read each relevant reference above for replacement semantics, not just renamed APIs.
