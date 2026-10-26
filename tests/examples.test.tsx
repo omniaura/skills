@@ -340,3 +340,15 @@ test("post-commit invalidation failure does not restore an obsolete snapshot", a
   await expect(model.add(item)).rejects.toThrow("refetch failed");
   expect(qc.getQueryData(["items"])).toEqual([...initial, item]);
 });
+
+test("refresh failures render the local error boundary", async () => {
+  const retry = deferred<string>();
+  let calls = 0;
+  render(() => (
+    <Profile id="a" load={() => (++calls === 1 ? Promise.resolve("Ada") : retry.promise)} />
+  ));
+  await screen.findByText("Ada");
+  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+  retry.reject(new Error("refresh failed"));
+  await screen.findByRole("button", { name: "Retry: Error: refresh failed" });
+});

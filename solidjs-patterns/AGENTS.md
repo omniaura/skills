@@ -150,7 +150,7 @@ For collections use `createOptimisticStore(() => authoritativeRows, [])`, then d
 
 ## Choose the data layer deliberately
 
-For an isolated read, an async memo plus `Loading` is enough. Keep TanStack Query when the application depends on shared keyed caching, deduplication, invalidation, pagination, persistence, or its devtools. Solid 2 handles async rendering consistency; it does not automatically supply a QueryClient cache or those tools. Do not remove a working cache solely to remove resource boilerplate. For Query v6 recipes, read [query.md](query.md).
+For an isolated read, an async memo plus `Loading` is enough. Keep TanStack Query when the application depends on shared keyed caching, deduplication, invalidation, pagination, persistence, or its devtools. Solid 2 handles async rendering consistency; it does not automatically supply a QueryClient cache or those tools. Do not remove a working cache solely to remove resource boilerplate. For Query v6 recipes, read [query.md](rules/query.md).
 
 These patterns work in an SPA. They do not require SolidStart, SSR, server functions, or a routing migration. Do not carry SolidStart 1.x `query`/`createAsync` recipes into Solid 2 without checking that integration's current API.
 
