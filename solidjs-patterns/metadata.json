@@ -1,5 +1,5 @@
 {
-  "version": "3.0.0",
+  "version": "3.0.1",
   "organization": "Omni Aura",
   "date": "October 2026",
   "abstract": "Compact Solid 2.0 RC patterns for SPA applications: deferred updates, split effects, async boundaries, optimistic actions, draft stores, DOM ownership, and TanStack Solid Query v6. Six focused rules with generated, typechecked examples and runtime regression tests. v3 requires Solid 2.0; use v2 for Solid 1.x.",

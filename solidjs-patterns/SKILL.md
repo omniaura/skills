@@ -4,7 +4,7 @@ description: Write, review, and migrate Solid 2.0 RC applications using fine-gra
 license: MIT
 metadata:
   author: omniaura
-  version: "3.0.0"
+  version: "3.0.1"
 ---
 
 # Solid 2 Patterns

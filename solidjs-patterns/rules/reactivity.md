@@ -44,7 +44,7 @@ export function deferredRead() {
 
 ## Split effects; return cleanup
 
-`createEffect(compute, apply)` tracks only compute. Compute must be pure; apply is untracked and may perform side effects. Return cleanup from apply: `onCleanup` inside apply silently does not register. Use `createRenderEffect(compute, apply)` only for necessary pre-paint DOM work.
+`createEffect(compute, apply)` tracks only compute. Compute must be pure; apply is untracked and may perform side effects. Return cleanup from apply: `onCleanup` inside apply silently does not register. Use `createRenderEffect(compute, apply)` only for necessary pre-paint DOM work. Compute runs **immediately** when the effect is created (apply is queued), so register effects after the declarations their compute reads — an effect above a later `const` hits a temporal-dead-zone error.
 
 ```ts
 import { createEffect, type Accessor } from "solid-js";

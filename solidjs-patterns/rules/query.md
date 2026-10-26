@@ -8,7 +8,9 @@ Target `@tanstack/solid-query@6.0.0-rc.5` (and matching devtools). Continue usin
 
 `query.data` suspends when no data is ready; put normal consumers under `Loading` and errors under `Errored`. On invalidation/refetch, keep cached content visible; use `isFetching` for a subtle indicator, not an early return that hides the content. Solid already retains previous values; do not mechanically port `keepPreviousData`. Function placeholders no longer receive previous-data arguments.
 
-**Trap:** a disabled query with no cache can suspend indefinitely. `query.data ?? fallback` does not guard it: the read suspends before `??`. Status reads (`isPending`, `isSuccess`, `status`, `isFetching`, `error`) do not suspend. Guard optional/disabled queries by status before reading data, or provide meaningful initial/placeholder data.
+For object and array results, `query.data` is a reconciled store proxy whose identity stays stable across refetches **and query-key changes**. Identity checks (`data === lastData`) never observe a change: compare the query key/owner id or `snapshot(query.data)` content, and `snapshot()` anything you retain as "the previous data".
+
+**Trap:** a disabled query with no cache can suspend indefinitely. `query.data ?? fallback` does not guard it: the read suspends before `??`. Status reads (`isPending`, `isSuccess`, `status`, `error`) do not suspend. In 6.0.0-rc.5, `isFetching` (and therefore `isLoading`, which is `isPending && isFetching`) reads the data node's pending state and **can** suspend a disabled, empty query; guard with `isPending`/`isSuccess` first and reserve `isFetching` for enabled queries or reads under `Loading`. Guard optional/disabled queries by status before reading data, or provide meaningful initial/placeholder data.
 
 ```tsx
 import { useQuery } from "@tanstack/solid-query";
@@ -49,6 +51,8 @@ export function useRename(save: (name: string) => Promise<void>) {
 ## Cache optimism must paint before the transition
 
 In this RC, normal cache writes inside `onMutate`, or immediately before `mutate()` in the same unflushed tick, are held by the mutation transition. They do **not** paint optimistically. For shared cache optimism: cancel in-flight reads, capture a closure snapshot, write the cache, **flush**, then mutate; rollback on failure and invalidate for authoritative state. Local optimistic primitives can instead be written inside `onMutate` and are designed for transitions.
+
+Overlapping mutations entangle: follow-up writes in `onSuccess`/`onError`/`onSettled` can wait for _other_ in-flight mutations to settle. For per-row pending/error/reconcile UI, set the row's pending state and `flush()` before `mutate`, and keep the row's follow-up logic in the async handler around `await mutate(vars)`.
 
 ```ts
 import { flush } from "solid-js";
