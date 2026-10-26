@@ -294,3 +294,49 @@ test("ref factory cleans listeners after disposal, even on a retained DOM node",
   fireEvent.click(button);
   expect(presses).toBe(1);
 });
+
+test("failed optimism removes an originally absent cache entry", async () => {
+  const qc = client();
+  const save = deferred<{ id: string; text: string }>();
+  let model!: ReturnType<typeof useAddItem>;
+  render(() => (
+    <QueryClientProvider client={qc}>
+      {(() => {
+        model = useAddItem(() => save.promise);
+        return <span />;
+      })()}
+    </QueryClientProvider>
+  ));
+  const pending = model.add({ id: "b", text: "Optimistic" });
+  const failure = expect(pending).rejects.toThrow("offline");
+  await waitFor(() =>
+    expect(qc.getQueryData(["items"])).toEqual([{ id: "b", text: "Optimistic" }]),
+  );
+  save.reject(new Error("offline"));
+  await failure;
+  expect(qc.getQueryState(["items"])).toBeUndefined();
+});
+
+test("post-commit invalidation failure does not restore an obsolete snapshot", async () => {
+  const qc = client();
+  const initial = [{ id: "a", text: "Original" }];
+  qc.setQueryData(["items"], initial);
+  const item = { id: "b", text: "Committed" };
+  let model!: ReturnType<typeof useAddItem>;
+  render(() => (
+    <QueryClientProvider client={qc}>
+      {(() => {
+        model = useAddItem(async () => item);
+        return <span />;
+      })()}
+    </QueryClientProvider>
+  ));
+  const invalidate = qc.invalidateQueries.bind(qc);
+  let calls = 0;
+  qc.invalidateQueries = (...args) => {
+    if (++calls === 1) return Promise.reject(new Error("refetch failed"));
+    return invalidate(...args);
+  };
+  await expect(model.add(item)).rejects.toThrow("refetch failed");
+  expect(qc.getQueryData(["items"])).toEqual([...initial, item]);
+});
