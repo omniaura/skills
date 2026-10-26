@@ -15,7 +15,9 @@ export function Profile(props: { id: string; load: (id: string) => Promise<strin
     <section>
       <button
         onClick={() => {
-          void refresh(name);
+          void refresh(name).catch(() => {
+            /* Errored displays the failure. */
+          });
         }}
       >
         Refresh

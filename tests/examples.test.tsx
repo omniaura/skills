@@ -352,3 +352,62 @@ test("refresh failures render the local error boundary", async () => {
   retry.reject(new Error("refresh failed"));
   await screen.findByRole("button", { name: "Retry: Error: refresh failed" });
 });
+
+test("an explicitly undefined button type does not submit its form", () => {
+  let submitted = false;
+  render(() => (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        submitted = true;
+      }}
+    >
+      <Button type={undefined}>Safe</Button>
+    </form>
+  ));
+  fireEvent.click(screen.getByRole("button"));
+  expect(screen.getByRole("button").getAttribute("type")).toBe("button");
+  expect(submitted).toBe(false);
+});
+
+test("query loader receives cancellation when its consumer unmounts", async () => {
+  let signal!: AbortSignal;
+  const request = deferred<string>();
+  const qc = client();
+  const { unmount } = render(() => (
+    <QueryClientProvider client={qc}>
+      <OptionalName
+        id="a"
+        load={(_id, next) => {
+          signal = next;
+          return request.promise;
+        }}
+      />
+    </QueryClientProvider>
+  ));
+  await waitFor(() => expect(signal).toBeDefined());
+  expect(signal.aborted).toBe(false);
+  unmount();
+  expect(signal.aborted).toBe(true);
+  request.resolve("Ada");
+});
+
+test("overlapping cache writes fail explicitly instead of being silently discarded", async () => {
+  const qc = client();
+  const save = deferred<{ id: string; text: string }>();
+  let model!: ReturnType<typeof useAddItem>;
+  render(() => (
+    <QueryClientProvider client={qc}>
+      {(() => {
+        model = useAddItem(() => save.promise);
+        return <span />;
+      })()}
+    </QueryClientProvider>
+  ));
+  const item = { id: "a", text: "First" };
+  const pending = model.add(item);
+  await expect(model.add({ id: "b", text: "Second" })).rejects.toThrow("already pending");
+  save.resolve(item);
+  await expect(pending).resolves.toEqual(item);
+  expect(qc.getQueryData(["items"])).toEqual([item]);
+});

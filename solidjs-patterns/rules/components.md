@@ -14,9 +14,9 @@ import { dynamic, type JSX } from "@solidjs/web";
 
 export function Button(input: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
   const props = merge({ type: "button" as const }, input);
-  const rest = omit(props, "class", "children");
+  const rest = omit(props, "class", "children", "type");
   return (
-    <button {...rest} class={["button", props.class]}>
+    <button {...rest} type={props.type ?? "button"} class={["button", props.class]}>
       {props.children}
     </button>
   );

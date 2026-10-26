@@ -100,7 +100,9 @@ export function Profile(props: { id: string; load: (id: string) => Promise<strin
     <section>
       <button
         onClick={() => {
-          void refresh(name);
+          void refresh(name).catch(() => {
+            /* Errored displays the failure. */
+          });
         }}
       >
         Refresh
@@ -171,11 +173,14 @@ Target `@tanstack/solid-query@6.0.0-rc.5` (and matching devtools). Continue usin
 ```tsx
 import { useQuery } from "@tanstack/solid-query";
 
-export function OptionalName(props: { id?: string; load: (id: string) => Promise<string> }) {
+export function OptionalName(props: {
+  id?: string;
+  load: (id: string, signal: AbortSignal) => Promise<string>;
+}) {
   const query = useQuery(() => ({
     queryKey: ["name", props.id],
     enabled: props.id !== undefined,
-    queryFn: () => props.load(props.id!),
+    queryFn: ({ signal }) => props.load(props.id!, signal),
   }));
   return <p>{query.isSuccess ? query.data : "Select a person"}</p>;
 }
@@ -225,7 +230,7 @@ export function useAddItem(save: (item: Item) => Promise<Item>) {
   let inFlight = false;
   async function add(item: Item) {
     // Serialize this list writer: snapshot rollback must not erase a later add.
-    if (inFlight) return;
+    if (inFlight) throw new Error("An add is already pending; retry after it settles");
     inFlight = true;
     committed = false;
     try {
@@ -253,7 +258,7 @@ export function useAddItem(save: (item: Item) => Promise<Item>) {
 }
 ```
 
-The example serializes only this hook instance. If other components write the same key concurrently, use an app-wide per-key coordinator or operation-specific rollback, not a whole-list snapshot that can clobber another writer. Treat a failure during awaited invalidation separately from a server rejection when the API may already have committed. Reuse an existing app helper rather than duplicating this machinery in each component.
+The example rejects overlapping calls to this hook instance explicitly; callers must handle the busy error and offer retry. If other components write the same key concurrently, use an app-wide per-key coordinator or operation-specific rollback, not a whole-list snapshot that can clobber another writer. Treat a failure during awaited invalidation separately from a server rejection when the API may already have committed. Reuse an existing app helper rather than duplicating this machinery in each component.
 
 Cache observer updates are deferred too. In tests, await the DOM with `waitFor`/`findBy*`; use `flush()` at the explicit optimistic pre-mutation boundary, not indiscriminately after every operation.
 
@@ -345,9 +350,9 @@ import { dynamic, type JSX } from "@solidjs/web";
 
 export function Button(input: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
   const props = merge({ type: "button" as const }, input);
-  const rest = omit(props, "class", "children");
+  const rest = omit(props, "class", "children", "type");
   return (
-    <button {...rest} class={["button", props.class]}>
+    <button {...rest} type={props.type ?? "button"} class={["button", props.class]}>
       {props.children}
     </button>
   );
